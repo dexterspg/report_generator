@@ -30,3 +30,17 @@ class JobStatus(BaseModel):
     completed_at: Optional[datetime] = None
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+
+
+class MaturityAnalysisRequest(BaseModel):
+    """Request parameters for maturity analysis processing.
+
+    Report year/month is the reference point for year bucketing.
+    Year 1 = payments in the 12 months after the report date.
+    Target currency is taken from "Company Currency" field in source data.
+    """
+    report_year: int
+    report_month: int
+    exchange_rate: float = 1.0
+    input_header_start: int = 8
+    input_data_start: int = 9

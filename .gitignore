@@ -282,6 +282,7 @@ outputs/
 results/
 experiments/
 models/
+!webapp/backend/models/
 artifacts/
 runs/
 logs/

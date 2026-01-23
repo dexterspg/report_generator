@@ -1,10 +1,10 @@
 <template>
   <div class="container">
     <AppHeader />
-    
+
     <main>
       <!-- Upload Section -->
-      <UploadSection 
+      <UploadSection
         v-if="currentView === 'upload'"
         @file-selected="handleFileSelected"
         @extract-company-codes="handleExtractCompanyCodes"
@@ -14,27 +14,32 @@
         :company-codes="companyCodes"
         :loading-company-codes="loadingCompanyCodes"
         :selected-company-code="selectedCompanyCode"
+        :report-type="reportType"
+        :maturity-options="maturityOptions"
         @company-code-selected="handleCompanyCodeSelected"
         @process-file="handleProcessFile"
+        @report-type-changed="handleReportTypeChanged"
+        @maturity-options-changed="handleMaturityOptionsChanged"
       />
 
       <!-- Progress Section -->
-      <ProgressSection 
+      <ProgressSection
         v-if="currentView === 'progress'"
         :progress="progress"
         :progress-text="progressText"
       />
 
       <!-- Results Section -->
-      <ResultsSection 
+      <ResultsSection
         v-if="currentView === 'results'"
         :results="results"
         :job-id="currentJobId"
+        :report-type="reportType"
         @process-another="resetApp"
       />
 
       <!-- Error Section -->
-      <ErrorSection 
+      <ErrorSection
         v-if="currentView === 'error'"
         :error-message="errorMessage"
         @retry="resetApp"
@@ -42,9 +47,9 @@
     </main>
 
     <!-- Help Guide Modal -->
-    <HelpGuide 
-      :is-visible="showHelpGuide" 
-      @close="showHelpGuide = false" 
+    <HelpGuide
+      :is-visible="showHelpGuide"
+      @close="showHelpGuide = false"
     />
 
     <AppFooter />
@@ -85,24 +90,50 @@ export default {
     const results = ref(null)
     const errorMessage = ref('')
     const showHelpGuide = ref(false)
-    
+
+    // Report type: 'ctr' or 'maturity'
+    const reportType = ref('maturity')
+
+    // CTR Mapper options
     const processingOptions = reactive({
       headerStart: 27,
       dataStart: 28
+    })
+
+    // Maturity Analysis options
+    const maturityOptions = reactive({
+      reportYear: new Date().getFullYear(),
+      reportMonth: new Date().getMonth() + 1,
+      exchangeRate: 1.0,
+      headerStart: 8,
+      dataStart: 9
     })
 
     const companyCodes = ref([])
     const loadingCompanyCodes = ref(false)
     const selectedCompanyCode = ref('')
 
+    const handleReportTypeChanged = (type) => {
+      reportType.value = type
+      // Reset company codes when switching report types
+      companyCodes.value = []
+      selectedCompanyCode.value = ''
+    }
+
+    const handleMaturityOptionsChanged = (options) => {
+      Object.assign(maturityOptions, options)
+    }
+
     const handleFileSelected = async (file) => {
       selectedFile.value = file
       // Reset company codes when new file is selected
       companyCodes.value = []
       selectedCompanyCode.value = ''
-      
-      // Automatically extract company codes when file is selected
-      await handleExtractCompanyCodes()
+
+      // Only extract company codes for CTR report type
+      if (reportType.value === 'ctr') {
+        await handleExtractCompanyCodes()
+      }
     }
 
     const handleExtractCompanyCodes = async () => {
@@ -112,38 +143,16 @@ export default {
       }
 
       loadingCompanyCodes.value = true
-      
+
       try {
         // Initialize XLSX library if needed
         const xlsxReady = await initializeXLSX()
         if (!xlsxReady) {
           throw new Error('Excel reading library not available')
         }
-        
+
         // LOCAL DESKTOP APPROACH: Read Excel file directly in browser
         await extractCompanyCodesLocally()
-        
-        // FUTURE SERVER APPROACH: Uncomment when backend endpoint is available
-        /*
-        const formData = new FormData()
-        formData.append('file', selectedFile.value)
-        formData.append('input_header_start', processingOptions.headerStart)
-
-        const response = await axios.post('/extract-company-codes', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
-        })
-
-        if (response.data.success) {
-          companyCodes.value = response.data.company_codes
-          if (companyCodes.value.length === 1) {
-            selectedCompanyCode.value = companyCodes.value[0]
-          }
-        } else {
-          throw new Error('Failed to extract company codes')
-        }
-        */
 
       } catch (error) {
         console.error('Extract company codes error:', error)
@@ -160,32 +169,32 @@ export default {
           try {
             const data = new Uint8Array(e.target.result)
             const workbook = XLSX.read(data, { type: 'array' })
-            
+
             // Get first worksheet
             const firstSheetName = workbook.SheetNames[0]
             const worksheet = workbook.Sheets[firstSheetName]
-            
-            // Convert to JSON starting from header row (27 by default)
+
+            // Convert to JSON starting from header row (27 by default for CTR)
             const headerRow = processingOptions.headerStart - 1
             const jsonData = XLSX.utils.sheet_to_json(worksheet, {
               range: headerRow,
               header: 1
             })
-            
+
             if (jsonData.length === 0) {
               throw new Error('No data found in Excel file')
             }
-            
+
             // Get headers from first row
             const headers = jsonData[0]
-            const companyCodeIndex = headers.findIndex(header => 
+            const companyCodeIndex = headers.findIndex(header =>
               header && header.toString().toLowerCase().includes('company code')
             )
-            
+
             if (companyCodeIndex === -1) {
               throw new Error('Company Code column not found')
             }
-            
+
             // Extract unique company codes from data rows
             const uniqueCodes = new Set()
             for (let i = 1; i < jsonData.length; i++) {
@@ -195,14 +204,14 @@ export default {
                 uniqueCodes.add(companyCode.toString().trim())
               }
             }
-            
+
             const sortedCodes = Array.from(uniqueCodes).sort()
             companyCodes.value = sortedCodes
-            
+
             if (sortedCodes.length === 1) {
               selectedCompanyCode.value = sortedCodes[0]
             }
-            
+
             resolve()
           } catch (error) {
             reject(error)
@@ -216,7 +225,7 @@ export default {
     // Add XLSX library dynamically for local Excel reading
     const loadXLSXLibrary = () => {
       if (window.XLSX) return Promise.resolve()
-      
+
       return new Promise((resolve, reject) => {
         const script = document.createElement('script')
         script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
@@ -229,7 +238,7 @@ export default {
     // Initialize XLSX library when needed
     const initializeXLSX = async () => {
       if (window.XLSX) return true
-      
+
       try {
         await loadXLSXLibrary()
         return true
@@ -249,28 +258,46 @@ export default {
         return
       }
 
-      processingOptions.headerStart = options.headerStart
-      processingOptions.dataStart = options.dataStart
-
       currentView.value = 'progress'
       updateProgress(0, t('progress.uploading'))
 
       try {
         const formData = new FormData()
         formData.append('file', selectedFile.value)
-        formData.append('input_header_start', options.headerStart)
-        formData.append('input_data_start', options.dataStart)
-        formData.append('template_header_start', '1')
-        formData.append('template_data_start', '2')
-        
-        // Add company code filter if selected
-        if (selectedCompanyCode.value) {
-          formData.append('company_code', selectedCompanyCode.value)
+
+        let uploadEndpoint = '/upload'
+        let downloadEndpoint = '/download'
+
+        if (reportType.value === 'maturity') {
+          // Maturity Analysis
+          uploadEndpoint = '/upload-maturity-analysis'
+          downloadEndpoint = '/download-maturity-analysis'
+
+          formData.append('report_year', maturityOptions.reportYear)
+          formData.append('report_month', maturityOptions.reportMonth)
+          formData.append('exchange_rate', maturityOptions.exchangeRate)
+          formData.append('input_header_start', maturityOptions.headerStart)
+          formData.append('input_data_start', maturityOptions.dataStart)
+
+        } else {
+          // CTR Mapper
+          processingOptions.headerStart = options.headerStart
+          processingOptions.dataStart = options.dataStart
+
+          formData.append('input_header_start', options.headerStart)
+          formData.append('input_data_start', options.dataStart)
+          formData.append('template_header_start', '1')
+          formData.append('template_data_start', '2')
+
+          // Add company code filter if selected
+          if (selectedCompanyCode.value) {
+            formData.append('company_code', selectedCompanyCode.value)
+          }
         }
 
         updateProgress(10, t('progress.uploading'))
 
-        const response = await axios.post('/upload', formData, {
+        const response = await axios.post(uploadEndpoint, formData, {
           headers: {
             'Content-Type': 'multipart/form-data'
           }
@@ -282,7 +309,7 @@ export default {
 
         currentJobId.value = response.data.job_id
         updateProgress(30, t('progress.processing'))
-        startStatusPolling()
+        startStatusPolling(downloadEndpoint)
 
       } catch (error) {
         console.error('Process error:', error)
@@ -290,7 +317,7 @@ export default {
       }
     }
 
-    const startStatusPolling = () => {
+    const startStatusPolling = (downloadEndpoint) => {
       if (pollInterval.value) {
         clearInterval(pollInterval.value)
       }
@@ -310,6 +337,8 @@ export default {
             case 'completed':
               clearInterval(pollInterval.value)
               updateProgress(100, t('progress.complete'))
+              // Add download endpoint to results
+              status.result.downloadEndpoint = downloadEndpoint
               setTimeout(() => showResults(status), 500)
               break
             case 'failed':
@@ -340,7 +369,7 @@ export default {
     const showError = (message) => {
       errorMessage.value = message
       currentView.value = 'error'
-      
+
       if (pollInterval.value) {
         clearInterval(pollInterval.value)
       }
@@ -357,7 +386,7 @@ export default {
       companyCodes.value = []
       selectedCompanyCode.value = ''
       loadingCompanyCodes.value = false
-      
+
       if (pollInterval.value) {
         clearInterval(pollInterval.value)
       }
@@ -393,7 +422,9 @@ export default {
       results,
       errorMessage,
       showHelpGuide,
+      reportType,
       processingOptions,
+      maturityOptions,
       companyCodes,
       loadingCompanyCodes,
       selectedCompanyCode,
@@ -401,6 +432,8 @@ export default {
       handleExtractCompanyCodes,
       handleCompanyCodeSelected,
       handleProcessFile,
+      handleReportTypeChanged,
+      handleMaturityOptionsChanged,
       resetApp
     }
   }

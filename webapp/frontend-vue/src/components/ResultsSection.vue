@@ -69,6 +69,10 @@ export default {
     jobId: {
       type: String,
       required: true
+    },
+    reportType: {
+      type: String,
+      default: 'ctr'
     }
   },
   emits: ['process-another'],
@@ -81,7 +85,7 @@ export default {
     const fileSize = computed(() => {
       const size = props.results?.file_size
       if (!size) return 'N/A'
-      
+
       const k = 1024
       const sizes = ['Bytes', 'KB', 'MB', 'GB']
       const i = Math.floor(Math.log(size) / Math.log(k))
@@ -89,7 +93,9 @@ export default {
     })
 
     const downloadUrl = computed(() => {
-      return `/download/${props.jobId}`
+      // Use the download endpoint from results if available, otherwise fallback
+      const endpoint = props.results?.downloadEndpoint || '/download'
+      return `${endpoint}/${props.jobId}`
     })
 
     return {

@@ -1,0 +1,65 @@
+================================================================================
+MATURITY ANALYSIS SUMMARY - REPORT DATE: DECEMBER 2021
+================================================================================
+
+YEAR BUCKET PERIODS:
+--------------------
+Bucket        Period Range
+------        ------------
+Year 1        Jan 2022 - Dec 2022
+Year 2        Jan 2023 - Dec 2023
+Year 3        Jan 2024 - Dec 2024
+Year 4        Jan 2025 - Dec 2025
+Year 5        Jan 2026 - Dec 2026
+Year 6        Jan 2027 - Dec 2027
+Thereafter    Jan 2028+
+
+================================================================================
+FINANCIAL VALUES (CONTRACT CURRENCY)
+================================================================================
+
+Activation Group       | AG-100000000     | AG-100000600     | AG-100003211
+-----------------------|------------------|------------------|------------------
+Contract ID            | CT-100000000     | CT-100001101     | CT-100010106
+Contract Currency      | UF               | UF               | USD
+Target Currency        | UF               | UF               | CAD
+-----------------------|------------------|------------------|------------------
+Year 1 (Jan-Dec 2022)  | 5,400,000        | 124,385,726      | 0
+Year 2 (Jan-Dec 2023)  | 0                | 131,966,525      | 0
+Year 3 (Jan-Dec 2024)  | 0                | 10,997,210       | 0
+Year 4 (Jan-Dec 2025)  | 0                | 114,554,275      | 25,000
+Year 5 (Jan-Dec 2026)  | 0                | 22,910,855       | 30,000
+Year 6 (Jan-Dec 2027)  | 0                | 0                | 30,000
+Thereafter (Jan 2028+) | 0                | 0                | 0
+-----------------------|------------------|------------------|------------------
+Total                  | 5,400,000        | 404,814,592      | 85,000
+Less: Finance Charges  | -46,182          | -162,960,645     | -1,398
+Total Principal Liab.  | 5,353,818        | 241,853,947      | 83,602
+-----------------------|------------------|------------------|------------------
+ST Principal Closing   | 0*               | 52,997,000       | 0*
+LT Principal Closing   | 0*               | 78,830,300       | 0*
+Total Principal        | 0*               | 131,827,300      | 0*
+
+================================================================================
+NOTES:
+================================================================================
+* No Dec 2021 row exists in source data for principal snapshot
+
+Source File: Consolidated Financial Schedules.xlsx
+- AG-100000000: 12 source rows (Jan-Dec 2022)
+- AG-100000600: 55 source rows (Sep 2021 - Mar 2026)
+- AG-100003211: 60 source rows (Mar 2025 - Feb 2030)
+
+Time Bucketing Formula:
+  months_diff = (payment_year - report_year) * 12 + (payment_month - report_month)
+
+  Year 1:     1 <= months_diff <= 12
+  Year 2:    13 <= months_diff <= 24
+  Year 3:    25 <= months_diff <= 36
+  Year 4:    37 <= months_diff <= 48
+  Year 5:    49 <= months_diff <= 60
+  Year 6:    61 <= months_diff <= 72
+  Thereafter: months_diff > 72
+  Skip:       months_diff <= 0 (at or before report date)
+
+================================================================================

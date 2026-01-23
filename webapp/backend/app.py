@@ -28,7 +28,8 @@ from pathlib import Path
 import uvicorn
 
 from services.excel_processor import ExcelProcessor
-from models.schemas import ProcessingRequest, ProcessingResponse, JobStatus
+from services.maturity_analysis_processor import MaturityAnalysisProcessor
+from models.schemas import ProcessingRequest, ProcessingResponse, JobStatus, MaturityAnalysisRequest
 
 # Global mode flag
 DESKTOP_MODE = False
@@ -44,8 +45,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize processor and job storage
+# Initialize processors and job storage
 processor = ExcelProcessor()
+maturity_processor = MaturityAnalysisProcessor()
 jobs: Dict[str, JobStatus] = {}
 
 # Ensure upload directory exists
@@ -279,6 +281,146 @@ async def extract_company_codes(
         if 'temp_path' in locals() and temp_path.exists():
             temp_path.unlink()
         raise HTTPException(status_code=500, detail=f"Failed to extract company codes: {str(e)}")
+
+
+async def process_maturity_analysis_background(
+    job_id: str,
+    input_path: str,
+    output_path: str,
+    report_year: int,
+    report_month: int,
+    exchange_rate: float,
+    input_header_start: int,
+    input_data_start: int
+):
+    """Background task for maturity analysis processing"""
+    try:
+        jobs[job_id].status = "processing"
+
+        start_time = time.perf_counter()
+        result = maturity_processor.process_file(
+            source_file_path=input_path,
+            output_file_path=output_path,
+            report_year=report_year,
+            report_month=report_month,
+            exchange_rate=exchange_rate,
+            input_header_start=input_header_start,
+            input_data_start=input_data_start
+        )
+        end_time = time.perf_counter()
+
+        jobs[job_id].completed_at = datetime.now()
+        jobs[job_id].result = result
+        jobs[job_id].result["processing_time"] = end_time - start_time
+
+        if result["success"]:
+            jobs[job_id].status = "completed"
+        else:
+            jobs[job_id].status = "failed"
+            jobs[job_id].error = result.get("error")
+
+    except Exception as e:
+        jobs[job_id].status = "failed"
+        jobs[job_id].error = str(e)
+        jobs[job_id].completed_at = datetime.now()
+        print(f"Maturity analysis error for job {job_id}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+
+@app.post("/upload-maturity-analysis", response_model=ProcessingResponse)
+async def upload_maturity_analysis(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    report_year: int = Form(...),
+    report_month: int = Form(...),
+    exchange_rate: float = Form(1.0),
+    input_header_start: int = Form(8),
+    input_data_start: int = Form(9)
+):
+    """Upload and process Excel file for maturity analysis report.
+
+    The report date (year + month) is the reference point for year bucketing.
+    Year 1 = payments in the 12 months after the report date.
+    Target currency is taken from "Company Currency" field in the source data.
+    """
+
+    # Debug logging
+    print(f"Received maturity analysis request - year: {report_year}, month: {report_month}")
+
+    # Validate file type
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        raise HTTPException(status_code=400, detail="Only Excel files (.xlsx, .xls) are allowed")
+
+    # Validate report month
+    if not 1 <= report_month <= 12:
+        raise HTTPException(status_code=400, detail="Report month must be between 1 and 12")
+
+    # Generate unique job ID
+    job_id = str(uuid.uuid4())
+
+    # Clean up old files
+    cleanup_old_files()
+
+    try:
+        # Save uploaded file
+        input_path = UPLOAD_DIR / f"{job_id}_input_{file.filename}"
+        output_path = UPLOAD_DIR / f"{job_id}_output_maturity_analysis.xlsx"
+
+        with open(input_path, "wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
+
+        # Create job status
+        jobs[job_id] = JobStatus(
+            job_id=job_id,
+            status="pending",
+            created_at=datetime.now()
+        )
+
+        # Start background processing
+        background_tasks.add_task(
+            process_maturity_analysis_background,
+            job_id,
+            str(input_path),
+            str(output_path),
+            report_year,
+            report_month,
+            exchange_rate,
+            input_header_start,
+            input_data_start
+        )
+
+        return ProcessingResponse(
+            success=True,
+            message="File uploaded successfully. Maturity analysis processing started.",
+            job_id=job_id
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
+@app.get("/download-maturity-analysis/{job_id}")
+async def download_maturity_analysis(job_id: str):
+    """Download processed maturity analysis file"""
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    job = jobs[job_id]
+    if job.status != "completed":
+        raise HTTPException(status_code=400, detail="Job not completed yet")
+
+    output_path = UPLOAD_DIR / f"{job_id}_output_maturity_analysis.xlsx"
+
+    if not output_path.exists():
+        raise HTTPException(status_code=404, detail="Output file not found")
+
+    return FileResponse(
+        path=str(output_path),
+        filename=f"maturity_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 
 @app.get("/health")
