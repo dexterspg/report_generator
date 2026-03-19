@@ -1,0 +1,219 @@
+QUICK REFERENCE
+===============
+
+stack:
+  language: Python 3 (backend), JavaScript ES6+ (frontend)
+  framework: FastAPI 0.104.1 (backend), Vue.js 3.3.8 (frontend)
+  database: None (stateless - in-memory job tracking)
+  build_tool: pip (backend), npm (frontend), PyInstaller (desktop packaging)
+  test_framework: pytest (manual tests present, no runner configured)
+
+structure:
+  type: monolith (single codebase)
+  deployment: dual-mode (web server + desktop application)
+  organization: layered (backend: services/models), component-based (frontend)
+
+recommended_agents:
+  - @agent-codebase-archaeologist (to understand conventions and business logic)
+  - @agent-system-architect (to design new features)
+
+---
+
+DETAILED TECHNOLOGY STACK ANALYSIS
+===================================
+
+PRIMARY LANGUAGES
+-----------------
+- Python 3.x (backend application logic)
+- JavaScript ES6+ (frontend application)
+- Vue.js SFC (Single File Components)
+
+BACKEND STACK
+-------------
+Framework & API:
+  - FastAPI 0.104.1 (modern async web framework)
+  - Uvicorn 0.24.0 (ASGI server with standard extras)
+  - Starlette 0.27.0 (FastAPI foundation)
+  - Pydantic 2.5.0 (data validation)
+
+Data Processing:
+  - Pandas 2.1.3 (Excel data manipulation)
+  - NumPy 1.25.2 (numerical operations)
+  - OpenPyXL 3.1.2 (Excel file handling)
+
+Utilities:
+  - python-multipart 0.0.6 (file upload handling)
+  - email-validator 2.1.0 (validation)
+  - python-json-logger 2.0.7 (structured logging)
+
+FRONTEND STACK
+--------------
+Core Framework:
+  - Vue.js 3.3.8 (progressive JavaScript framework)
+  - Vite 5.0.0 (build tool and dev server)
+  - @vitejs/plugin-vue 4.5.0 (Vue plugin for Vite)
+
+Libraries:
+  - Axios 1.6.0 (HTTP client)
+  - Vue I18n 11.1.11 (internationalization - English/Spanish)
+
+Build & Dev Tools:
+  - Vite (fast HMR, ES modules)
+  - Rollup (bundler via Vite)
+
+DEVELOPMENT TOOLS
+-----------------
+Process Management:
+  - Concurrently 7.6.0 (run multiple npm scripts)
+  - Chokidar 3.5.3 (file watching)
+  - Node.js watch-build.js (custom watch script)
+
+PACKAGING & DEPLOYMENT
+----------------------
+Desktop Application:
+  - PyInstaller 6.3.0 (Python to executable conversion)
+  - Custom build_desktop.py script
+  - Bundles frontend-dist with backend into single executable
+
+Output Formats:
+  - Windows executable (.exe)
+  - Standalone desktop package (CTR_Mapper_Desktop_Package)
+  - ZIP distribution (CTR_Mapper_Desktop_Package.zip)
+
+PROJECT ARCHITECTURE
+--------------------
+Dual-Mode Application:
+  1. Web Mode: Standard web server (port 8000)
+  2. Desktop Mode: Local server with auto-browser launch (port 5000)
+
+Backend Structure:
+  webapp/backend/
+    ├── app.py (main FastAPI application - dual mode support)
+    ├── services/
+    │   ├── excel_processor.py (core Excel processing logic)
+    │   └── formula_mapper.py (formula mapping logic)
+    ├── models/
+    │   └── schemas.py (Pydantic models)
+    └── requirements.txt
+
+Frontend Structure:
+  webapp/frontend-vue/
+    ├── src/
+    │   ├── App.vue (main component)
+    │   ├── components/ (UI components)
+    │   │   ├── AppHeader.vue
+    │   │   ├── AppFooter.vue
+    │   │   ├── UploadSection.vue
+    │   │   ├── ProgressSection.vue
+    │   │   ├── ResultsSection.vue
+    │   │   ├── ErrorSection.vue
+    │   │   ├── HelpGuide.vue
+    │   │   └── LanguageSelector.vue
+    │   ├── i18n/ (internationalization)
+    │   │   └── locales/ (en.json, es.json)
+    │   └── main.js (entry point)
+    ├── vite.config.js
+    └── package.json
+
+BUILD OUTPUT
+------------
+  - frontend-dist/ (compiled Vue.js frontend)
+  - dist/ (PyInstaller output)
+  - build/ (PyInstaller intermediate files)
+
+CORS & MIDDLEWARE
+-----------------
+  - FastAPI CORSMiddleware (allow all origins for development)
+  - Proxy configuration in Vite for API requests
+
+API FEATURES
+------------
+  - Background task processing
+  - File upload/download
+  - Health checks
+  - Job status tracking
+  - Automatic cleanup
+  - OpenAPI documentation (/docs)
+
+INTERNATIONALIZATION
+--------------------
+  - Supports English and Spanish
+  - Vue I18n with locale files
+  - LocalStorage persistence
+
+TESTING
+-------
+  - Manual test scripts present:
+    * test_upload.py
+    * test_company_code_filter.py
+  - No formal test framework detected
+
+DATABASE
+--------
+  - No database detected
+  - In-memory job storage (Python dictionaries)
+  - File-based storage for uploads/results
+
+LEGACY CODE
+-----------
+  - script_consolidation_report_mapper.py (original Python script)
+  - Uses same dependencies: openpyxl, pandas, numpy
+  - Includes yaspin for CLI spinner (not in web version)
+
+VERSION CONTROL
+---------------
+  - Git repository (main branch)
+  - Comprehensive .gitignore (Python, Node.js, Vue, build artifacts)
+
+CORE SERVICES
+-------------
+
+ExcelProcessor (services/excel_processor.py):
+  - Main business logic for Excel processing
+  - Reads input Excel files with pandas
+  - Processes consolidated transaction reports
+  - Generates formatted poliza ledger output
+  - Handles company code filtering
+  - Creates multi-file ZIP exports
+
+FormulaMapper (services/formula_mapper.py):
+  - Maps source Excel formulas to target format
+  - Calculates exchange rates
+  - Converts currency amounts
+  - Builds GL account components
+
+ENTRY POINTS
+------------
+
+Web Mode:
+  python webapp/backend/app.py
+  -> Runs on port 8000
+  -> Serves SPA from frontend-dist/
+  -> Stateless API server
+
+Desktop Mode:
+  python webapp/backend/app.py --desktop
+  -> Runs on port 5000
+  -> Auto-launches browser
+  -> Same codebase, different configuration
+
+Build Desktop Executable:
+  python webapp/backend/build_desktop.py
+  -> Creates dist/CTR_Mapper.exe
+  -> Bundles frontend + backend + Python runtime
+  -> Package: CTR_Mapper_Desktop_Package/
+
+NOTABLE PATTERNS
+----------------
+1. Single codebase, dual deployment mode
+2. Frontend served as static files by backend in desktop mode
+3. Background processing with async/await
+4. Component-based Vue architecture
+5. Excel-centric data processing application
+6. No authentication/authorization layer
+7. Temporary file management with automatic cleanup
+8. Company code filtering support (recent feature)
+9. Multi-company Excel output (ZIP with separate files)
+10. UUID-based job tracking
+11. CORS enabled for cross-origin requests
+12. Swagger/OpenAPI auto-documentation

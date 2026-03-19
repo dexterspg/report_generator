@@ -4,19 +4,22 @@
     
     <main>
       <!-- Upload Section -->
-      <UploadSection 
+      <UploadSection
         v-if="currentView === 'upload'"
         @file-selected="handleFileSelected"
-        @extract-company-codes="handleExtractCompanyCodes"
         @show-help="showHelpGuide = true"
         :selected-file="selectedFile"
         :processing-options="processingOptions"
+        :show-company-code-filter="false"
+        @process-file="handleProcessFile"
+      />
+      <!-- Company code filter props (kept for future use):
+        @extract-company-codes="handleExtractCompanyCodes"
         :company-codes="companyCodes"
         :loading-company-codes="loadingCompanyCodes"
         :selected-company-code="selectedCompanyCode"
         @company-code-selected="handleCompanyCodeSelected"
-        @process-file="handleProcessFile"
-      />
+      -->
 
       <!-- Progress Section -->
       <ProgressSection 
@@ -100,9 +103,10 @@ export default {
       // Reset company codes when new file is selected
       companyCodes.value = []
       selectedCompanyCode.value = ''
-      
-      // Automatically extract company codes when file is selected
-      await handleExtractCompanyCodes()
+
+      // Company code extraction disabled - now processing all company codes automatically
+      // To re-enable, uncomment the line below:
+      // await handleExtractCompanyCodes()
     }
 
     const handleExtractCompanyCodes = async () => {
@@ -262,11 +266,12 @@ export default {
         formData.append('input_data_start', options.dataStart)
         formData.append('template_header_start', '1')
         formData.append('template_data_start', '2')
-        
-        // Add company code filter if selected
-        if (selectedCompanyCode.value) {
-          formData.append('company_code', selectedCompanyCode.value)
-        }
+
+        // Company code filter disabled - now processing all company codes automatically
+        // To re-enable single company code filtering, uncomment below:
+        // if (selectedCompanyCode.value) {
+        //   formData.append('company_code', selectedCompanyCode.value)
+        // }
 
         updateProgress(10, t('progress.uploading'))
 

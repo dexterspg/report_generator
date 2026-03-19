@@ -21,7 +21,20 @@
       </div>
     </div>
     
-    <!-- Show company code filter information if applicable -->
+    <!-- Show company codes included in ZIP -->
+    <div v-if="results?.company_codes && results.company_codes.length > 0" class="company-codes-info">
+      <div class="codes-header">
+        <span class="codes-label">{{ $t('results.companyCodes') || 'Company Codes in ZIP:' }}</span>
+        <span class="codes-count">{{ results.file_count || results.company_codes.length }} {{ $t('results.files') || 'files' }}</span>
+      </div>
+      <div class="codes-list">
+        <span v-for="code in results.company_codes" :key="code" class="code-badge">
+          {{ code }}
+        </span>
+      </div>
+    </div>
+
+    <!-- Show company code filter information if applicable (kept for future use) -->
     <div v-if="results?.filtered_by_company_code" class="filter-info">
       <div class="filter-badge">
         <span class="filter-label">{{ $t('results.filteredBy') || 'Filtered by Company Code:' }}</span>
@@ -31,17 +44,17 @@
         {{ $t('results.filteredInfo') || 'Processed' }} {{ results.input_rows }} {{ $t('results.of') || 'of' }} {{ results.original_rows }} {{ $t('results.totalRows') || 'total rows' }}
       </p>
     </div>
-    
+
     <div class="download-section">
       <h3>{{ $t('results.complete') }}</h3>
-      <p>{{ $t('results.readyDownload') }}</p>
+      <p>{{ results?.zip_file ? ($t('results.readyDownloadZip') || 'Your ZIP file is ready for download') : ($t('results.readyDownload') || 'Your file is ready for download') }}</p>
       <br>
-      <a 
-        :href="downloadUrl" 
-        class="btn btn-download" 
+      <a
+        :href="downloadUrl"
+        class="btn btn-download"
         download
       >
-        {{ $t('results.downloadButton') }}
+        {{ results?.zip_file ? ($t('results.downloadZip') || 'Download ZIP') : ($t('results.downloadButton') || 'Download') }}
       </a>
     </div>
     
@@ -79,9 +92,10 @@ export default {
     })
 
     const fileSize = computed(() => {
-      const size = props.results?.file_size
+      // Use zip_size if available, otherwise fall back to file_size
+      const size = props.results?.zip_size || props.results?.file_size
       if (!size) return 'N/A'
-      
+
       const k = 1024
       const sizes = ['Bytes', 'KB', 'MB', 'GB']
       const i = Math.floor(Math.log(size) / Math.log(k))
@@ -134,5 +148,49 @@ export default {
   margin: 0;
   color: #0d47a1;
   font-size: 0.95em;
+}
+
+.company-codes-info {
+  margin: 20px 0;
+  padding: 15px;
+  background-color: #e8f5e9;
+  border-radius: 8px;
+  border: 1px solid #a5d6a7;
+}
+
+.codes-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.codes-label {
+  font-weight: 600;
+  color: #2e7d32;
+}
+
+.codes-count {
+  background-color: #43a047;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 0.9em;
+  font-weight: 500;
+}
+
+.codes-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.code-badge {
+  background-color: #81c784;
+  color: #1b5e20;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  font-weight: 500;
 }
 </style>

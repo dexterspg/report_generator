@@ -32,10 +32,10 @@
     </div>
     <br>
 
-    <!-- Company Code Selection -->
-    <div v-if="selectedFile" class="company-code-section">
+    <!-- Company Code Selection (hidden by default, kept for future use) -->
+    <div v-if="showCompanyCodeFilter && selectedFile" class="company-code-section">
       <h3>{{ $t('upload.companyCodeFilter') || 'Company Code Filter' }}</h3>
-      
+
       <div v-if="loadingCompanyCodes" class="loading-section">
         <p>⏳ {{ $t('upload.extracting') || 'Loading company codes...' }}</p>
       </div>
@@ -44,23 +44,23 @@
         <label for="company-code-select">
           {{ $t('upload.selectCompany') || 'Select Company Code:' }}
         </label>
-        <select 
+        <select
           id="company-code-select"
           :value="selectedCompanyCode"
           @change="handleCompanyCodeChange"
           class="company-code-select"
         >
           <option value="">{{ $t('upload.allCompanies') || 'All Companies' }}</option>
-          <option 
-            v-for="code in companyCodes" 
-            :key="code" 
+          <option
+            v-for="code in companyCodes"
+            :key="code"
             :value="code"
           >
             {{ code }}
           </option>
         </select>
         <p class="code-info">
-          {{ $t('upload.foundCodes') || 'Found' }} {{ companyCodes.length }} 
+          {{ $t('upload.foundCodes') || 'Found' }} {{ companyCodes.length }}
           {{ $t('upload.companyCodes') || 'company codes' }}
         </p>
       </div>
@@ -132,6 +132,11 @@ export default {
       type: Object,
       default: () => ({ headerStart: 27, dataStart: 28 })
     },
+    showCompanyCodeFilter: {
+      type: Boolean,
+      default: false  // Hidden by default, set to true to show company code dropdown
+    },
+    // Props below kept for future use when company code filter is re-enabled
     companyCodes: {
       type: Array,
       default: () => []

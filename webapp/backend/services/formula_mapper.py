@@ -7,7 +7,7 @@ def nombre_formula(header: str, src_df: pd.DataFrame, *args) -> pd.DataFrame:
     try:
         df = pd.DataFrame(columns=[header])
         df[header] = (
-            src_df['Translation Type'] + " " +
+            src_df['Transaction Type'] + " " +
             pd.to_datetime(
                 src_df['Fiscal Year'].astype(str) + '-' + src_df['Fiscal Period'].astype(str)
             ).dt.strftime('%b-%Y').str.lower()
@@ -21,7 +21,7 @@ def nombre_formula(header: str, src_df: pd.DataFrame, *args) -> pd.DataFrame:
 def descripcion_formula(header: str, src_df: pd.DataFrame, *args) -> pd.DataFrame:
     """Generate description formula combining multiple fields"""
     df = pd.DataFrame(columns=[header])
-    df[header] = ('M1/' + src_df['Unit'].astype(str) + '/' + src_df['Fiscal Year'].astype(str) + '/' + 
+    df[header] = ('M1/' + src_df['Activation Group ID'].astype(str) + '/' + src_df['Fiscal Year'].astype(str) + '/' + 
         src_df['Fiscal Period'].astype(str) + '/' + src_df['Contract Name'].astype(str) + '/' + 
         src_df['Vendor'].astype(str)
     )
@@ -45,7 +45,7 @@ def gl_account_split(header: str, src_df: pd.DataFrame, *args) -> pd.DataFrame:
     if idx is None:
         return pd.DataFrame()
     
-    splitted = src_df["GL Account"].str.split("-", expand=True)
+    splitted = src_df["Account Number"].str.split("-", expand=True)
     
     if splitted.shape[1] <= idx:
         col_data = pd.Series([None] * src_df.shape[0])
@@ -57,7 +57,8 @@ def gl_account_split(header: str, src_df: pd.DataFrame, *args) -> pd.DataFrame:
 
 # Formula mappings dictionary
 FORMULA_MAPPINGS = {
-    "TC": None, 
+    # "TC": None, 
+    "TC": lambda header, src_df, *args: pd.DataFrame({header: src_df["Company Currency Exchange Rate"]}),
     "Nombre": nombre_formula,
     "divisa": lambda header, src_df, *args: pd.DataFrame({header: src_df["Contract Currency"]}),
     "compania": gl_account_split,
@@ -82,8 +83,22 @@ FORMULA_MAPPINGS = {
             0
         )
     }),
-    "debito_convertido": "",
-    "credito_convertido": "",
+    # "debito_convertido": "",
+    # "credito_convertido": "",
+    "debito_convertido": lambda header, src_df, *args: pd.DataFrame({
+        header: np.where(
+            src_df["Amount in Company Currency"].astype(float) > 0,
+            src_df["Amount in Company Currency"].astype(float),
+            0
+        )
+    }),
+    "credito_convertido": lambda header, src_df, *args: pd.DataFrame({
+        header: np.where(
+            src_df["Amount in Company Currency"].astype(float) < 0,
+            np.abs(src_df["Amount in Company Currency"].astype(float)),
+            0
+        )
+    }),
     "descripcion": descripcion_formula
 }
 

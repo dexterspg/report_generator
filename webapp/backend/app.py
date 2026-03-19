@@ -26,6 +26,8 @@ from typing import Dict, Any
 import asyncio
 from pathlib import Path
 import uvicorn
+import zipfile
+import shutil
 
 from services.excel_processor import ExcelProcessor
 from models.schemas import ProcessingRequest, ProcessingResponse, JobStatus
@@ -81,12 +83,12 @@ def cleanup_old_files():
         print(f"Cleanup error: {e}")
 
 
-async def process_file_background(job_id: str, input_path: str, output_path: str, 
+async def process_file_background(job_id: str, input_path: str, output_path: str,
                                 request_params: ProcessingRequest, company_code: str = None):
-    """Background task for file processing"""
+    """Background task for file processing (kept for future use with single company code filter)"""
     try:
         jobs[job_id].status = "processing"
-        
+
         start_time = time.perf_counter()
         result = processor.process_file(
             source_file_path=input_path,
@@ -98,17 +100,70 @@ async def process_file_background(job_id: str, input_path: str, output_path: str
             company_code=company_code
         )
         end_time = time.perf_counter()
-        
+
         jobs[job_id].completed_at = datetime.now()
         jobs[job_id].result = result
         jobs[job_id].result["processing_time"] = end_time - start_time
-        
+
         if result["success"]:
             jobs[job_id].status = "completed"
         else:
             jobs[job_id].status = "failed"
             jobs[job_id].error = result.get("error")
-            
+
+    except Exception as e:
+        jobs[job_id].status = "failed"
+        jobs[job_id].error = str(e)
+        jobs[job_id].completed_at = datetime.now()
+        print(f"Processing error for job {job_id}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+
+async def process_file_all_company_codes_background(job_id: str, input_path: str, output_dir: str,
+                                                     zip_path: str, request_params: ProcessingRequest):
+    """Background task for processing all company codes and creating ZIP"""
+    try:
+        jobs[job_id].status = "processing"
+
+        start_time = time.perf_counter()
+
+        # Process all company codes
+        result = processor.process_file_all_company_codes(
+            source_file_path=input_path,
+            output_dir=output_dir,
+            input_header_start=request_params.input_header_start,
+            input_data_start=request_params.input_data_start,
+            template_header_start=request_params.template_header_start,
+            template_data_start=request_params.template_data_start
+        )
+
+        if result["success"]:
+            # Create ZIP archive from generated files
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for file_info in result["generated_files"]:
+                    file_path = file_info["file_path"]
+                    file_name = file_info["file_name"]
+                    zipf.write(file_path, file_name)
+                    # Clean up individual Excel file after adding to ZIP
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+
+            result["zip_file"] = zip_path
+            result["zip_size"] = os.path.getsize(zip_path)
+
+        end_time = time.perf_counter()
+
+        jobs[job_id].completed_at = datetime.now()
+        jobs[job_id].result = result
+        jobs[job_id].result["processing_time"] = end_time - start_time
+
+        if result["success"]:
+            jobs[job_id].status = "completed"
+        else:
+            jobs[job_id].status = "failed"
+            jobs[job_id].error = result.get("error")
+
     except Exception as e:
         jobs[job_id].status = "failed"
         jobs[job_id].error = str(e)
@@ -135,39 +190,45 @@ async def upload_file(
     input_data_start: int = Form(28),
     template_header_start: int = Form(1),
     template_data_start: int = Form(2),
-    company_code: str = Form(None)
+    company_code: str = Form(None)  # Kept for future use
 ):
-    """Upload and process Excel file"""
-    
+    """Upload and process Excel file - generates ZIP with one file per company code"""
+
     # Debug logging
-    print(f"Received upload request - company_code: {company_code}")
-    
+    print(f"Received upload request - company_code param (not used): {company_code}")
+
     # Validate file type
     if not file.filename.endswith(('.xlsx', '.xls')):
         raise HTTPException(status_code=400, detail="Only Excel files (.xlsx, .xls) are allowed")
-    
+
     # Generate unique job ID
     job_id = str(uuid.uuid4())
-    
+
     # Clean up old files
     cleanup_old_files()
-    
+
     try:
         # Save uploaded file
         input_path = UPLOAD_DIR / f"{job_id}_input_{file.filename}"
-        output_path = UPLOAD_DIR / f"{job_id}_output_poliza_ledger.xlsx"
-        
+
+        # Create output directory for this job's Excel files
+        output_dir = UPLOAD_DIR / f"{job_id}_output"
+        output_dir.mkdir(exist_ok=True)
+
+        # ZIP file path
+        zip_path = UPLOAD_DIR / f"{job_id}_output_poliza_ledger.zip"
+
         with open(input_path, "wb") as buffer:
             content = await file.read()
             buffer.write(content)
-        
+
         # Create job status
         jobs[job_id] = JobStatus(
             job_id=job_id,
             status="pending",
             created_at=datetime.now()
         )
-        
+
         # Create processing request
         request_params = ProcessingRequest(
             input_header_start=input_header_start,
@@ -175,23 +236,23 @@ async def upload_file(
             template_header_start=template_header_start,
             template_data_start=template_data_start
         )
-        
-        # Start background processing
+
+        # Start background processing for all company codes
         background_tasks.add_task(
-            process_file_background,
+            process_file_all_company_codes_background,
             job_id,
             str(input_path),
-            str(output_path),
-            request_params,
-            company_code
+            str(output_dir),
+            str(zip_path),
+            request_params
         )
-        
+
         return ProcessingResponse(
             success=True,
             message="File uploaded successfully. Processing started.",
             job_id=job_id
         )
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
@@ -207,24 +268,33 @@ async def get_job_status(job_id: str):
 
 @app.get("/download/{job_id}")
 async def download_result(job_id: str):
-    """Download processed file"""
+    """Download processed ZIP file containing Excel files for each company code"""
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Job not found")
-    
+
     job = jobs[job_id]
     if job.status != "completed":
         raise HTTPException(status_code=400, detail="Job not completed yet")
-    
+
+    # Check for ZIP file (new format)
+    zip_path = UPLOAD_DIR / f"{job_id}_output_poliza_ledger.zip"
+    if zip_path.exists():
+        return FileResponse(
+            path=str(zip_path),
+            filename=f"poliza_ledger_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+            media_type="application/zip"
+        )
+
+    # Fallback to single Excel file (old format, kept for compatibility)
     output_path = UPLOAD_DIR / f"{job_id}_output_poliza_ledger.xlsx"
-    
-    if not output_path.exists():
-        raise HTTPException(status_code=404, detail="Output file not found")
-    
-    return FileResponse(
-        path=str(output_path),
-        filename=f"poliza_ledger_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    if output_path.exists():
+        return FileResponse(
+            path=str(output_path),
+            filename=f"poliza_ledger_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+    raise HTTPException(status_code=404, detail="Output file not found")
 
 
 @app.post("/extract-company-codes")

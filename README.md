@@ -79,15 +79,18 @@ ctr_mapper/
 
 ### Input Requirements
 Your Excel file must contain these columns:
-- Translation Type
+- Transaction Type
 - Fiscal Year
 - Fiscal Period
-- Unit
+- Activation Group ID
 - Contract Name
 - Vendor
-- GL Account
+- Account Number
 - Contract Currency
 - Amount in Contract Currency
+- Company Currency Exchange Rate
+- Amount in Company Currency
+- Company Code
 
 ### Processing Options
 - **Header Start Row**: Row number where headers begin (default: 27)
@@ -207,7 +210,7 @@ python app.py --desktop # Desktop mode
 
 ## 📄 License
 
-This project is proprietary software for Aeromexico consolidation report processing.
+This project is proprietary software for consolidation report processing.
 
 ## 🆘 Support
 
