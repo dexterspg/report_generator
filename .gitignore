@@ -15,6 +15,13 @@
 *.xltm
 *.csv
 
+# Allow Excel/CSV files in data/ folder
+!data/
+!data/**/*.xls
+!data/**/*.xlsx
+!data/**/*.xlsm
+!data/**/*.csv
+
 # Java target files
 target/
 *.class
@@ -289,7 +296,7 @@ checkpoints/
 snapshots/
 
 # Data directories (common names)
-data/
+# data/ - excluded from ignore, used for committable Excel/CSV files
 dataset/
 datasets/
 raw_data/
