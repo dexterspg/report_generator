@@ -243,6 +243,10 @@ logs/
 # Dataset files
 *.csv
 *.json
+# Allow webapp config and locale JSON files
+!webapp/**/package.json
+!webapp/**/locales/*.json
+!webapp/frontend-dist/**/*.json
 *.jsonl
 *.parquet
 *.feather
