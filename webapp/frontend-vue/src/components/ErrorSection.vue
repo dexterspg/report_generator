@@ -1,21 +1,21 @@
 <template>
   <section class="card error-card">
-    <h2>{{ $t('error.title') }}</h2>
+    <h2>Error</h2>
     <div class="error-content">
-      <p><strong>{{ $t('error.errorLabel') }}</strong> {{ errorMessage }}</p>
-      <p>{{ $t('error.checkFile') }}</p>
+      <p><strong>Error:</strong> {{ errorMessage }}</p>
+      <p>Please check that your file:</p>
       <ul>
-        <li>{{ $t('error.validExcel') }}</li>
-        <li>{{ $t('error.requiredColumns') }}</li>
-        <li>{{ $t('error.correctRows') }}</li>
-        <li>{{ $t('error.notCorrupted') }}</li>
+        <li>Is a valid Excel (.xlsx, .xls) or CSV (.csv) file</li>
+        <li>Contains the required CTR columns (Account Number, Contract Currency, etc.)</li>
+        <li>Has headers in the correct row position</li>
+        <li>Is not corrupted or password-protected</li>
       </ul>
     </div>
-    <button 
-      class="btn btn-secondary" 
+    <button
+      class="btn btn-secondary"
       @click="$emit('retry')"
     >
-      {{ $t('error.retry') }}
+      Try Again
     </button>
   </section>
 </template>

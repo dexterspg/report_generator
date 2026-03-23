@@ -1,10 +1,10 @@
 <template>
   <section class="card">
-    <h2>{{ $t('progress.title') }}</h2>
+    <h2>Processing</h2>
     <div class="progress-container">
       <div class="progress-bar">
-        <div 
-          class="progress-fill" 
+        <div
+          class="progress-fill"
           :style="{ width: `${progress}%` }"
         ></div>
       </div>

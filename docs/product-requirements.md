@@ -64,10 +64,22 @@ Today, getting to that number is entirely manual:
 - **So that** I can navigate currency-specific results efficiently
 - **Priority:** P0 (must)
 
-**US-05 — Standalone Web Application**
+**US-05 — Standalone Desktop Application**
 - **As a** client accountant or implementation consultant
-- **I want to** use a dedicated web application with a simple upload-process-download workflow
-- **So that** I can process CTR files without needing additional tools or manual Excel work
+- **I want to** use a standalone desktop application (distributed as a single `.exe` file) with a simple configure-upload-process-download workflow
+- **So that** I can process CTR files on my own laptop without needing a server, internet access, or additional tools
+- **Priority:** P0 (must)
+
+**US-08 — Shareable Configuration Files**
+- **As a** team member sharing the tool with colleagues
+- **I want to** download my account mapping and exchange rates as Excel files and share them with other users who can upload them into their own copy of the application
+- **So that** teams can maintain consistent configuration across multiple desktops without a shared server
+- **Priority:** P0 (must)
+
+**US-09 — Configuration History and Rollback**
+- **As a** client accountant
+- **I want to** view a history of all configuration changes (uploads, resets, rollbacks) and rollback to any previous state if I make a mistake
+- **So that** I can recover from accidental overwrites or incorrect configuration uploads without losing data
 - **Priority:** P0 (must)
 
 ### Phase 2 (Future) — Multi-Period & Exclusions
@@ -138,9 +150,11 @@ Today, getting to that number is entirely manual:
 10. Re-measured Balance — col6 × col9 for monetary accounts, or = col7 for non-monetary accounts
 11. FX (Gain) or Loss — col10 − col7 (the primary deliverable)
 
-**FR-009:** The system shall accept two additional configuration inputs:
-- **Account mapping** — maps Account Number to Account Type (BS/P&L) and Monetary flag (Yes/No). Supplied via an editable table in the UI (auto-populated from accounts extracted from the CTR). Once saved, the mapping persists and pre-populates on subsequent CTR uploads; new accounts not in the saved mapping appear blank for the user to fill in.
-- **Period-end exchange rates** — spot rate per currency pair. Supplied as a file upload (`.xlsx`, `.xls`, or `.csv`) with two columns: `Currency` and `Rate`. Once uploaded, the rates persist and pre-populate on subsequent uploads; the user may re-upload a new file to replace them.
+**FR-009:** The system shall accept two configuration inputs, both supplied as file uploads (`.xlsx`, `.xls`, or `.csv`):
+- **Account mapping** — maps Account Number to Account Type (BS/P&L) and Monetary flag (Yes/No). Uploaded as a file with columns: `Account Number`, `Account Type`, `Monetary`. Supports two upload modes: **Replace** (clear existing, load from file) and **Merge** (add new entries, update existing entries with the same Account Number). The current mapping can be downloaded as an Excel file for sharing with other users. A Reset button clears all saved mapping data.
+- **Period-end exchange rates** — spot rate per currency pair. Uploaded as a file with columns: `Currency` and `Rate`. Supports the same **Replace** and **Merge** upload modes. The current rates can be downloaded as an Excel file for sharing. A Reset button clears all saved rate data.
+
+Both configuration files are independent of the CTR report — they can be uploaded, downloaded, shared, and managed before any CTR file is processed.
 
 **FR-010:** The system shall sort output rows by Account Number (ascending) within each worksheet.
 
@@ -161,15 +175,14 @@ Today, getting to that number is entirely manual:
 
 ### User Interface
 
-**FR-016:** The system shall be a standalone web application dedicated to FX Remeasurement processing. It is independent from the existing Poliza Ledger (CTR Mapper) application.
+**FR-016:** The system shall be a standalone desktop application dedicated to FX Remeasurement processing, distributed as a single `.exe` file built with PyInstaller. It is independent from the existing Poliza Ledger (CTR Mapper) application.
 
-**FR-017:** The application shall follow a two-step upload-configure-process-download workflow:
-- **Step 1 — Upload:** User uploads the CTR file. The system synchronously extracts unique GL accounts and contract currencies and returns them to the UI.
-- **Step 2 — Configure & Process:** User reviews the account mapping table (pre-populated from saved configuration where available; new accounts appear blank) and the exchange rates (pre-populated from saved rates where available). User updates as needed, then triggers processing. Processing runs asynchronously with job ID and status polling.
+**FR-017:** The application shall follow a two-step configure-then-process workflow:
+- **Step 1 — Configuration:** User manages two configuration files (account mapping and exchange rates) via upload, download, replace, merge, and reset operations. Each config shows a preview table of the current saved data. Configs persist locally and are available across sessions.
+- **Step 2 — Upload & Process:** User uploads the CTR report file. The Process button is disabled until both configurations are loaded. Processing runs asynchronously with job ID and status polling.
 - Download button upon completion.
-- Note: The two-step design is required because Step 2's UI depends on data extracted from the CTR in Step 1 (unique accounts and currencies).
 
-**FR-018:** The application shall support both web mode (multi-user server) and desktop mode (single-user, auto-opens browser), following the same dual-mode pattern as the existing CTR Mapper.
+**FR-018:** The application shall support both desktop mode (primary — single-user, `localhost:5001`, auto-opens browser) and web mode (secondary — multi-user server, `0.0.0.0:8000`). Desktop mode is the primary deployment target.
 
 **FR-019:** Error messages shall be specific and actionable:
 - Missing required columns (list which)
@@ -189,13 +202,30 @@ Today, getting to that number is entirely manual:
 
 **FR-024:** The system shall validate the input file is a valid Excel or CSV format; malformed files shall be rejected with a clear error message. For CSV files, the system shall auto-detect the header row or assume row 1 as headers (no metadata rows).
 
-### Configuration Persistence
+### Configuration Persistence & Storage
 
-**FR-025:** The system shall automatically save the account mapping (Account Number → Account Type + Monetary flag) to server-side storage after each successful processing run. On subsequent CTR uploads, the saved mapping shall pre-populate the UI table. Accounts in the new CTR that are not present in the saved mapping shall appear blank for the user to complete.
+**FR-025:** The system shall persist configuration data (account mapping, exchange rates, history) to the local filesystem:
+- **Desktop mode (PyInstaller `.exe`):** `%LOCALAPPDATA%/CTR-FX-Remeasurement/` — per-user, no admin rights required, survives `.exe` updates.
+- **Development mode:** `webapp/backend/` directory.
+- Internal storage format is JSON. Users interact with configs via Excel/CSV file upload and download — they never touch JSON files directly.
 
-**FR-026:** The system shall automatically save the exchange rates after each successful processing run. On subsequent CTR uploads, the saved rates shall be displayed as the current configuration. The user may re-upload a new rates file to replace the saved rates entirely.
+**FR-026:** The system shall support two upload modes for both configuration files:
+- **Replace** — clear all existing entries and load entirely from the uploaded file.
+- **Merge** — add new entries from the uploaded file; update existing entries that share the same key (Account Number for mapping, Currency for rates).
 
-**FR-027:** The system shall provide a reset capability allowing users to clear the saved account mapping, saved exchange rates, or both, to correct an incorrectly configured upload. After a reset, the corresponding inputs revert to blank/empty state.
+**FR-027:** The system shall provide reset and download capabilities for each configuration:
+- **Reset** clears all saved data for the selected configuration, reverting to blank/empty state.
+- **Download** exports the current saved configuration as a styled Excel file (`.xlsx`) for sharing with other users of the application.
+
+### Configuration History & Rollback
+
+**FR-028:** The system shall automatically record a history entry for every configuration change (upload, reset, rollback). Each history entry shall include:
+- Timestamp, action type, config type affected, source filename (if applicable)
+- A full snapshot of both configuration files at the time of the action
+
+**FR-029:** The system shall allow users to view the history of configuration changes (most recent first) and rollback to any previous entry's snapshot. Rollback restores the selected configuration(s) to the state captured in that history entry. The rollback action itself is also recorded in history.
+
+**FR-030:** History data shall be stored locally alongside configuration data (same `%LOCALAPPDATA%` path for desktop, same backend directory for dev).
 
 ---
 
@@ -212,8 +242,8 @@ Today, getting to that number is entirely manual:
 
 **NFR-003 — Reliability:**
 - Processing failures shall not corrupt the input file or affect concurrent jobs
-- Job status is ephemeral (in-memory) and not persisted across server restarts
-- Configuration (account mapping and exchange rates) is persisted to server-side files and survives server restarts
+- Job status is ephemeral (in-memory) and not persisted across application restarts
+- Configuration (account mapping, exchange rates, history) is persisted to local JSON files in `%LOCALAPPDATA%/CTR-FX-Remeasurement/` (desktop) and survives application restarts and `.exe` updates
 
 **NFR-004 — Security:**
 - File uploads shall be restricted to `.xlsx`, `.xls`, and `.csv` formats
@@ -332,24 +362,27 @@ Today, getting to that number is entirely manual:
 - Identify and validate required columns
 - Group data by {Account Number, Account Name, Contract Currency}
 - Aggregate Amount in Contract Currency and Amount in Company Currency
-- Accept account mapping input (Account Type + Monetary flag per account)
-- Accept period-end exchange rates input (spot rate per currency pair)
+- Accept account mapping as file upload (CSV/Excel) with replace/merge modes
+- Accept period-end exchange rates as file upload (CSV/Excel) with replace/merge modes
+- Download current configs as Excel for sharing between desktop users
 - Apply rate logic: period-end rate for monetary accounts, historical rate for non-monetary
 - Calculate Re-measured Balance (col6 × spot rate for monetary, = col7 for non-monetary)
 - **Calculate FX (Gain) or Loss per account (col10 − col7) — the primary deliverable**
 - Create one worksheet per unique currency with all 11 columns populated
 - Sort by Account Number
-- Build standalone web application with upload-process-download workflow
+- Build standalone desktop application (`.exe` via PyInstaller) with configure-upload-process-download workflow
+- Local configuration history with rollback capability
+- Local data storage in `%LOCALAPPDATA%/CTR-FX-Remeasurement/` (no admin rights, survives updates)
 - Follow same architectural pattern as existing CTR Mapper (FastAPI + Vue.js)
-- Support both web and desktop modes
+- Support both desktop (primary) and web (secondary) modes
 - English-only interface
 
 ### Out of Scope (Phase 2+)
 - Prior period FX adjustment carryforward
 - P&L account exclusion logic (auto-filtering Interest, Depreciation, etc.)
 - Multi-company output (separate files per company)
-- Audit trail or calculation transparency features
 - Database persistence of historical results
+- Cloud/server-based configuration sharing (users share via downloaded Excel files instead)
 
 ---
 
@@ -360,13 +393,14 @@ Today, getting to that number is entirely manual:
   - Standard structure: metadata rows 1-26, headers row 27, data rows 28+
   - Client provides via manual export
 
-### Additional Inputs (Phase 1)
-- **Account mapping** — Account Type (BS/P&L) and Monetary flag (Yes/No) per GL account. Supplied via an editable table in the UI; auto-populated with GL accounts from the CTR on first use, and pre-populated from saved configuration on return visits.
-- **Period-end exchange rates** — spot rate per currency pair. Supplied as a file upload (`.xlsx`, `.xls`, or `.csv`) with two columns: `Currency` and `Rate`; pre-populated from saved configuration on return visits.
+### Additional Inputs (Phase 1) — Configuration Files
+- **Account mapping** — Account Type (BS/P&L) and Monetary flag (Yes/No) per GL account. Uploaded as CSV or Excel file with columns: `Account Number`, `Account Type`, `Monetary`. Supports Replace and Merge upload modes. Downloadable as Excel for sharing.
+- **Period-end exchange rates** — spot rate per currency pair. Uploaded as CSV or Excel file with columns: `Currency` and `Rate`. Supports Replace and Merge upload modes. Downloadable as Excel for sharing.
 
-### Saved Configuration
-- **Account mapping config** — server-side JSON file; persisted after each successful run; survives server restarts.
-- **Exchange rates config** — server-side JSON file; persisted after each successful run; survives server restarts.
+### Local Configuration Storage
+- **Account mapping config** — JSON file in `%LOCALAPPDATA%/CTR-FX-Remeasurement/config/`; updated on every upload, merge, reset, or rollback; survives application restarts and `.exe` updates.
+- **Exchange rates config** — JSON file in same location; same lifecycle.
+- **Configuration history** — JSON files in `%LOCALAPPDATA%/CTR-FX-Remeasurement/history/`; one file per history entry; includes full snapshots of both configs at time of action.
 
 ### Additional Inputs (Phase 2)
 - Prior period FX adjustments — source TBD
@@ -405,7 +439,7 @@ Today, getting to that number is entirely manual:
 ### Constraints
 - **File Format:** Input must be Excel (`.xlsx`, `.xls`) or CSV (`.csv`)
 - **Row Structure:** CTR structure must match Nakisa standard (metadata in 1-26, headers at 27, data from 28)
-- **No Database:** Job data stored in-memory; not persisted across server restarts. Configuration data (account mapping, exchange rates) is persisted as JSON files on the server filesystem — no relational database required.
+- **No Database:** Job data stored in-memory; not persisted across application restarts. Configuration data (account mapping, exchange rates, history) is persisted as local JSON files in `%LOCALAPPDATA%/CTR-FX-Remeasurement/` — no relational database required.
 - **No Authentication:** Same security model as existing application (no auth/authz layer)
 - **Currency Codes:** 3-letter ISO currency codes expected (USD, EUR, GBP, etc.)
 
@@ -449,5 +483,5 @@ Today, getting to that number is entirely manual:
 ---
 
 **Document Status:** Draft
-**Last Updated:** 2026-03-20
+**Last Updated:** 2026-03-23
 **Next Review:** Upon implementation kickoff

@@ -4,12 +4,12 @@
 
 **CTR Mapper (Poliza Ledger)** at `C:/workarea/maturity_analysis_report/webapp/`
 
-FastAPI + Vue 3 (Options API with Composition `setup()`) + i18n (vue-i18n) + openpyxl. Background job processing with status polling. Dual-mode: web server (`0.0.0.0:8000`) and desktop (`localhost:5001` + auto-browser). Same blue brand background `#009cde`.
+FastAPI + Vue 3 (Options API with Composition `setup()`) + openpyxl. Background job processing with status polling. Dual-mode: web server (`0.0.0.0:8000`) and desktop (`localhost:5001` + auto-browser). Same blue brand background `#009cde`.
 
 ## What's Reused
 
-- **Backend skeleton:** FastAPI app structure, CORS middleware, upload directory management, `cleanup_old_files()`, background task pattern with job ID + status polling, `/upload` + `/status/{job_id}` + `/download/{job_id}` + `/health` + `/cleanup` endpoints, dual-mode `main()` with `--desktop` flag, PyInstaller path resolution
-- **CTR parsing logic:** `pd.read_excel(source, header=26)` reads header row 27, core column validation, `input_header_start` / `input_data_start` defaults (27/28). The CTR format is fixed (Nakisa system export) — the same source columns are present regardless of which output report is being generated. `ctr_reader.py` owns this shared knowledge; each output processor (Poliza's `formula_mapper.py`, FX's `fx_processor.py`) defines only the subset it needs.
+- **Backend skeleton:** FastAPI app structure, CORS middleware, upload directory management, `cleanup_old_files()`, background task pattern with job ID + status polling, `/status/{job_id}` + `/health` + `/cleanup` endpoints, dual-mode `main()` with `--desktop` flag, PyInstaller path resolution
+- **CTR parsing logic:** `pd.read_excel(source, header=26)` reads header row 27, core column validation, `input_header_start` / `input_data_start` defaults (27/28). The CTR format is fixed (Nakisa system export) — the same source columns are present regardless of which output report is being generated. `ctr_reader.py` owns this shared knowledge; each output processor defines only the subset it needs.
 - **Pydantic models:** `ProcessingRequest`, `ProcessingResponse`, `JobStatus` schemas (with minor field additions)
 - **Frontend infrastructure:** Vue 3 project scaffolding, `main.js`, `vite.config.js`, `package.json` deps (axios, vue)
 - **Shared components (adapted):** `ProgressSection.vue`, `ErrorSection.vue`, `AppFooter.vue` carry over as-is. `AppHeader.vue` carries over with new title/subtitle text
@@ -18,7 +18,8 @@ FastAPI + Vue 3 (Options API with Composition `setup()`) + i18n (vue-i18n) + ope
 
 ## What's New
 
-1. **FX Remeasurement processing engine** (replaces `formula_mapper.py` + `ExcelProcessor`)
+1. **FX Remeasurement processing engine** (`fx_processor.py` — replaces `formula_mapper.py` + `ExcelProcessor`)
+   - Uses vectorized `COLUMN_MAPPINGS` dict pattern: `{ column_name: callable(df, account_mapping, exchange_rates) -> pd.Series }`
    - Group by `{Account Number, Account Name, Contract Currency}` and aggregate `Amount in Contract Currency` and `Amount in Company Currency`
    - Apply account mapping (Account Type: BS/P&L, Monetary: Yes/No)
    - Apply period-end exchange rates per currency pair
@@ -26,47 +27,67 @@ FastAPI + Vue 3 (Options API with Composition `setup()`) + i18n (vue-i18n) + ope
    - Calculate FX (Gain) or Loss: `remeasured_balance - initial_measurement`
    - Output 11-column workbook with one worksheet per unique Contract Currency
 
-2. **Multi-input upload flow** (replaces single-file upload)
-   - CTR file upload (required) -- same drag-and-drop area
-   - Account mapping input (required for full calculation, optional for partial output)
-   - Period-end exchange rate input (required for full calculation, optional for partial output)
+2. **File-based configuration management** (replaces single-file upload + editable table approach)
+   - Both configs (account mapping + exchange rates) managed as uploadable/downloadable CSV/Excel files
+   - Two upload modes: **Replace** (overwrite all) and **Merge** (add new + update existing by key)
+   - Download current config as styled Excel for sharing between desktop users
+   - Reset capability to clear all saved data per config type
+   - Internal persistence as JSON files in `%LOCALAPPDATA%/CTR-FX-Remeasurement/config/`
 
-3. **Frontend redesign** (clean, purpose-built)
+3. **Configuration history with rollback**
+   - Every config change (upload, reset, rollback) recorded as a history entry with full snapshots
+   - Users can view history and rollback to any previous state
+   - Stored as individual JSON files in `%LOCALAPPDATA%/CTR-FX-Remeasurement/history/`
+
+4. **Frontend redesign** (clean, purpose-built)
    - No company code dropdown scaffolding
-   - No i18n (English only per FR-020) -- remove `vue-i18n` dependency entirely
+   - No i18n (English only per FR-020) — removed `vue-i18n` dependency entirely
    - No `HelpGuide` modal or `LanguageSelector` component
-   - New `InputPanel` component for account mapping + exchange rate entry
+   - Two-step UI: Step 1 (Configuration) with side-by-side account mapping + exchange rates panels, Step 2 (Upload CTR) with drag-and-drop
    - New results view showing per-currency summary with warnings for unmapped accounts
 
-4. **CSV support** (FR-001, FR-024) -- `pandas.read_csv()` path alongside Excel
+5. **CSV support** (FR-001, FR-024) — `pandas.read_csv()` path alongside Excel
 
-5. **Metadata extraction** from rows 1-26 (FR-002) -- fiscal year, period, accounting standard, company currency, etc.
+6. **Metadata extraction** from rows 1-26 (FR-002) — fiscal year, period, accounting standard, company currency, etc.
 
-## Files to Create
+## Deployment Model
 
-### Backend
+**Desktop mode is the primary deployment target.** The application is distributed as a single `.exe` file built with PyInstaller. Users run it on their own laptops — no server, no internet access required.
+
+- **Desktop mode (`--desktop` or `.exe`):** `localhost:5001`, auto-opens browser, single-user
+- **Web mode (dev/secondary):** `0.0.0.0:8000`, multi-user server
+- **Data storage (desktop):** `%LOCALAPPDATA%/CTR-FX-Remeasurement/` — per-user, no admin rights, survives `.exe` updates
+- **Data storage (dev):** `webapp/backend/` directory
+- **Config sharing:** Users download configs as Excel files and share them (email, network drive, etc.); recipients upload into their own copy
+
+## File Tree
 
 ```
-webapp-fx/
+webapp/
   backend/
-    app.py                          -- FastAPI app (cloned from sister, stripped of company-code endpoints, new /upload accepting 3 inputs)
-    config/
-      account_mapping.json          -- Persisted account mapping (Account Number → Account Type + Monetary). Created on first save, survives restarts.
-      exchange_rates.json           -- Persisted exchange rates (Currency → Rate). Created on first save, survives restarts.
+    app.py                          -- FastAPI app with config management, history, and processing endpoints
+    config/                         -- Dev-mode config storage (desktop uses %LOCALAPPDATA%)
+      account_mapping.json
+      exchange_rates.json
+    history/                        -- Dev-mode history storage
+      {uuid}.json                   -- One file per history entry (timestamp, action, snapshots)
+    uploads/                        -- Temporary file storage (cleaned up after 1 hour)
     models/
       __init__.py
-      schemas.py                    -- ProcessingRequest (adds account_mapping field), ProcessingResponse, JobStatus. Exchange rates come in as a file upload, parsed server-side into dict.
+      schemas.py                    -- ProcessingRequest, ProcessingResponse, JobStatus, FileInfo
     services/
       __init__.py
-      ctr_reader.py                 -- Shared CTR parsing layer, usable by any CTR-based output report. Validates the core CTR column set present in every Nakisa CTR export (Account Number, Account Name, Contract Currency, Amount in Contract Currency, Amount in Company Currency, Fiscal Year, Fiscal Period, Company Code, Transaction Type). Each processor defines its own required subset on top; ctr_reader.py rejects the file only if the core schema is missing. Metadata extraction from rows 1-26 is Excel-only; for CSV, metadata fields are returned as null with a user-facing warning.
-      fx_processor.py               -- FX Remeasurement transformation layer. Consumes the clean DataFrame from ctr_reader.py, applies group + aggregate + account mapping + rate logic, writes multi-sheet workbook. Adding a future CTR-based report type means adding a new processor here — ctr_reader.py does not change.
-      config_store.py               -- Read/write account_mapping.json and exchange_rates.json. Exposes load_account_mapping(), save_account_mapping(), load_exchange_rates(), save_exchange_rates(), reset_account_mapping(), reset_exchange_rates()
-```
-
-### Frontend
-
-```
-webapp-fx/
+      ctr_reader.py                 -- Shared CTR parsing layer. Validates 9 core columns, extracts metadata from rows 1-26 (Excel only), normalizes currencies, fills missing Account Names, coerces numeric amounts, detects conflicting Account Names. CSV returns None for metadata fields.
+      fx_processor.py               -- FX Remeasurement engine using COLUMN_MAPPINGS dict pattern. Each column is a callable taking (df, account_mapping, exchange_rates) → pd.Series. Uses numpy vectorized operations (np.where) instead of row-by-row iteration.
+      config_store.py               -- Config persistence + file parsing/export + history/rollback. Key functions:
+                                       - _get_app_data_dir() → resolves %LOCALAPPDATA% (desktop) or backend/ (dev)
+                                       - load/save/reset_account_mapping(), load/save/reset_exchange_rates()
+                                       - parse_account_mapping_file(), parse_exchange_rates_file() — parse CSV/Excel with flexible column name aliases
+                                       - merge_account_mapping(), merge_exchange_rates() — merge incoming into existing
+                                       - export_account_mapping(), export_exchange_rates() — export as styled Excel for sharing
+                                       - save_history_entry() — snapshots both configs at time of action
+                                       - list_history(), get_history_entry() — retrieve history (list returns summaries, get returns full with snapshots)
+                                       - rollback_to_entry() — restores configs from snapshot, records rollback in history
   frontend-vue/
     index.html
     vite.config.js
@@ -75,133 +96,136 @@ webapp-fx/
       main.js                       -- Vue 3 app mount (no i18n plugin)
       App.vue                       -- View state machine: upload -> progress -> results -> error
       assets/
-        styles.css                  -- Cloned from sister project, minor tweaks (no language selector positioning)
+        styles.css                  -- Cloned from sister project, minor tweaks
       components/
-        AppHeader.vue               -- Title: "FX Remeasurement Tool", subtitle: "CTR Closing Balance Extraction & FX Gain/Loss Calculator"
+        AppHeader.vue               -- Title: "CTR FX Remeasurement", subtitle: "Consolidated Transaction Report — FX Gain/Loss Calculator"
         AppFooter.vue               -- Minimal footer (same as sister)
-        UploadSection.vue           -- CTR file drag-and-drop (simplified, no company code cruft). Includes collapsible "Advanced" section for input_header_start / input_data_start overrides
-        InputPanel.vue              -- NEW: account mapping table (pre-populated from saved config; new accounts blank) + exchange rates file upload (pre-populated from saved rates; re-upload to replace) + Reset buttons per section (calls DELETE /config/account-mapping or DELETE /config/exchange-rates)
-        ProgressSection.vue         -- Reused as-is (progress bar + spinner)
-        ResultsSection.vue          -- NEW: per-currency summary cards, warnings for unmapped accounts, download button
-        ErrorSection.vue            -- Reused as-is (error display + retry)
+        ProgressSection.vue         -- Progress bar + spinner (hardcoded English)
+        ErrorSection.vue            -- Error display + retry (hardcoded English)
+        (Upload, Config, and Results components — to be implemented)
 ```
 
-## Files to Modify
+## Backend API Endpoints
 
-None. This is a new standalone application in `webapp-fx/` alongside the existing `webapp/`.
+### Configuration — Account Mapping
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/config/account-mapping` | Return current saved account mapping |
+| `POST` | `/config/account-mapping` | Upload account mapping file (CSV/Excel). Form fields: `file` (multipart), `mode` ("replace" or "merge") |
+| `GET` | `/config/account-mapping/download` | Download current mapping as styled Excel file |
+| `DELETE` | `/config/account-mapping` | Reset (clear) all saved account mapping data |
+
+### Configuration — Exchange Rates
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/config/exchange-rates` | Return current saved exchange rates |
+| `POST` | `/config/exchange-rates` | Upload exchange rates file (CSV/Excel). Form fields: `file` (multipart), `mode` ("replace" or "merge") |
+| `GET` | `/config/exchange-rates/download` | Download current rates as styled Excel file |
+| `DELETE` | `/config/exchange-rates` | Reset (clear) all saved exchange rate data |
+
+### History & Rollback
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/history` | List config change history (most recent first). Query param: `limit` (default 50) |
+| `GET` | `/history/{entry_id}` | Get full history entry including config snapshots |
+| `POST` | `/history/{entry_id}/rollback` | Rollback configs to a previous entry's snapshot. Query param: `config_type` ("account_mapping", "exchange_rates", or "both") |
+
+### Core Processing
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` | Serve frontend (index.html) or API info |
+| `GET` | `/status/{job_id}` | Get processing status for a job |
+| `GET` | `/health` | Health check (includes mode: desktop/web) |
+| `DELETE` | `/cleanup` | Manual cleanup of old files and jobs |
+
+**Note:** The CTR upload and processing endpoint (`POST /upload` or equivalent) is not yet implemented — it will accept the CTR file, run `ctr_reader.py` → `fx_processor.py`, and return results via the job status polling pattern.
 
 ## Key Design Decisions
 
-### 1. Account Mapping Input: Editable table in UI (not a file upload)
+### 1. Account Mapping Input: File upload (not editable table)
 
-**Why:** The account mapping is a small dataset (typically 5-30 unique GL accounts per client). A second file upload adds friction for a tiny payload. An inline editable table lets the user see the accounts extracted from the CTR and simply fill in Account Type and Monetary flag per row.
-
-**How it works:**
-- After CTR file upload, backend extracts unique `{Account Number, Account Name}` pairs and returns them in the `/upload` response alongside `saved_account_mapping` loaded from `config/account_mapping.json`
-- Frontend renders an editable table in `InputPanel.vue` with columns: Account Number (read-only), Account Name (read-only), Account Type (dropdown: BS / P&L), Monetary (dropdown: Yes / No)
-- Rows with saved mapping are pre-populated; rows for new accounts (not in saved config) appear with blank dropdowns
-- User reviews/edits, then clicks "Process"
-- Account mapping is sent as JSON in the process request body; on success, backend auto-saves to `config/account_mapping.json`
-- A "Reset account mapping" button calls `DELETE /config/account-mapping` and clears the saved file, allowing the user to start fresh if a previous configuration was wrong
-
-**Fallback:** If the user skips the mapping, columns 3-4 and 8-11 in the output are left blank with a warning banner. The aggregation (columns 1-2, 5-7) still works.
-
-### 2. Exchange Rate Input: File upload (CSV or Excel)
-
-**Why:** Clients like Abbott already maintain exchange rate tables in Excel/CSV as part of their period-end process. A file upload fits their existing workflow and avoids manual re-entry of rates each period.
+**Why:** The application is a standalone desktop tool distributed as a `.exe`. Multiple team members on different laptops need to share the same account mapping. A file-based approach (upload CSV/Excel, download to share) is simpler than an editable UI table and supports the desktop sharing model naturally.
 
 **How it works:**
-- `/upload` response includes `saved_exchange_rates` (loaded from `config/exchange_rates.json`). If rates are already saved, `InputPanel.vue` displays them as "Current rates: USD = 17.05, EUR = 18.50 …" with a "Re-upload to replace" option
-- If no saved rates exist, the upload field is shown blank
-- User uploads a new rates file (`.xlsx`, `.xls`, or `.csv`) to replace saved rates, or proceeds with saved rates (no new file needed)
-- Expected format: two columns — `Currency` and `Rate` (e.g., `USD, 17.05`)
-- Backend parses the file (if provided) and builds `{ "USD": 17.05, "EUR": 18.50, ... }` internally; on success, saves to `config/exchange_rates.json`
-- Currency codes are matched case-insensitively against the CTR's Contract Currencies
-- A "Reset exchange rates" button calls `DELETE /config/exchange-rates`, clearing the saved file so the user can re-upload correct rates
+- User uploads a CSV or Excel file with columns: `Account Number`, `Account Type` (BS/P&L), `Monetary` (Yes/No)
+- Column names are matched flexibly (e.g., "Acct Num", "Account No.", "account_number" all work)
+- Upload mode is either **Replace** (clear existing, load from file) or **Merge** (add new, update existing by Account Number)
+- Current mapping is always viewable via `GET /config/account-mapping` and downloadable as a styled Excel file via `GET /config/account-mapping/download`
+- Reset via `DELETE /config/account-mapping` clears all saved data
+- Every upload and reset is recorded in history with a full config snapshot for rollback
 
-**Fallback:** If the user has no saved rates and skips the upload, columns 9-11 in the output are left blank with a warning listing which currencies have no rate supplied.
+### 2. Exchange Rate Input: File upload with Replace/Merge
 
-### 3. Upload Flow: Two-step (upload then configure then process)
+**Why:** Same rationale as account mapping — file-based for desktop sharing. Clients already maintain rate tables in Excel.
 
-The flow is:
+**How it works:**
+- User uploads a CSV or Excel file with columns: `Currency` and `Rate`
+- Same Replace/Merge upload modes as account mapping
+- Same download, reset, and history tracking capabilities
+- Currency codes normalized to uppercase; rates parsed as floats
 
+### 3. Local Storage in %LOCALAPPDATA%
+
+**Why:** Desktop `.exe` users should not need admin rights, and config data should survive when a new version of the `.exe` is distributed. `%LOCALAPPDATA%` is per-user, writable without elevation, and independent of the `.exe` location.
+
+**Storage structure:**
 ```
-[Step 1: Upload CTR]  -->  [Step 2: Configure & Process]  -->  [Progress]  -->  [Results]
-     drag-and-drop           account mapping table                polling          download
-                             exchange rates file upload
-                             "Process" button
+%LOCALAPPDATA%/CTR-FX-Remeasurement/
+  config/
+    account_mapping.json          -- Current account mapping
+    exchange_rates.json           -- Current exchange rates
+  history/
+    {uuid}.json                   -- One file per history entry
+  uploads/                        -- Temporary files (auto-cleaned after 1 hour)
 ```
 
-This is different from the sister project's single-step flow. The reason is that Step 2 depends on data extracted from the CTR in Step 1 (unique accounts, unique currencies, company currency from metadata).
+### 4. Configuration History with Rollback
 
-**Backend endpoints:**
-- `POST /upload` -- accepts CTR file as multipart, plus optional form fields `input_header_start` (default 27) and `input_data_start` (default 28) for configurable row positions (FR-005). Returns `UploadResponse` (see schema below) including `saved_account_mapping` (pre-populated from `config/account_mapping.json` if it exists) and `saved_exchange_rates` (pre-populated from `config/exchange_rates.json` if it exists). Synchronous, fast -- just reads, extracts, and loads saved config. The UI exposes `input_header_start` / `input_data_start` as a collapsible "Advanced" section in `UploadSection.vue`
-- `POST /process/{job_id}` -- accepts multipart form: `account_mapping` as JSON + `rates_file` as file upload (`.xlsx`, `.xls`, `.csv`). Triggers background processing. On success, auto-saves `account_mapping` to `config/account_mapping.json` and parsed rates to `config/exchange_rates.json` (FR-025, FR-026).
-- `GET /status/{job_id}` -- same polling pattern as sister project
-- `GET /download/{job_id}` -- same download pattern. Download filename: `CTR_FX_Remeasurement_{FiscalYear}_{FiscalPeriod}_{Timestamp}.xlsx`. Note: `fiscal_year` and `fiscal_period` must be persisted in job state from the upload step for use in the download filename
-- `DELETE /config/account-mapping` -- clears `config/account_mapping.json`; returns 204. Used by the Reset button in `InputPanel.vue` (FR-027)
-- `DELETE /config/exchange-rates` -- clears `config/exchange_rates.json`; returns 204. Used by the Reset button in `InputPanel.vue` (FR-027)
+**Why:** Users may accidentally upload wrong configs (wrong file, wrong mode). Without rollback, they'd need to re-upload the correct file — which they may not have readily available. History snapshots capture the full state at each change, allowing recovery.
 
-This splits the sister project's single `/upload` endpoint into two steps: upload (extract) and process (compute). The status polling and download remain identical.
+**How it works:**
+- `save_history_entry()` is called on every config change (upload, reset, rollback)
+- Each entry stores: timestamp, action, config_type, source_filename, details, plus full snapshots of both `account_mapping.json` and `exchange_rates.json` at that moment
+- `list_history()` returns summaries (without bulky snapshots) for display
+- `get_history_entry()` returns the full entry including snapshots
+- `rollback_to_entry()` restores one or both configs from the snapshot, and records the rollback as a new history entry
 
-**`/upload` Response Schema (Pydantic model in `schemas.py`):**
+### 5. COLUMN_MAPPINGS Vectorized Pattern in fx_processor.py
 
+**Why:** Same pattern as the sister project's `FORMULA_MAPPINGS` in `formula_mapper.py`. Each output column is a pure function that takes the DataFrame + config and returns a pandas Series. This enables vectorized numpy operations instead of row-by-row iteration, and makes adding/modifying columns trivial.
+
+**Structure:**
 ```python
-class AccountInfo(BaseModel):
-    account_number: str
-    account_name: str
-
-class AccountMappingEntry(BaseModel):
-    account_number: str
-    account_type: str | None   # "BS" | "P&L" | None if not yet mapped
-    monetary: str | None       # "Yes" | "No" | None if not yet mapped
-
-class UploadMetadata(BaseModel):
-    fiscal_year: str | None
-    fiscal_period: str | None
-    accounting_standard: str | None
-    company_code: str | None
-
-class UploadResponse(BaseModel):
-    job_id: str
-    accounts: list[AccountInfo]
-    currencies: list[str]
-    company_currency: str | None
-    metadata: UploadMetadata
-    saved_account_mapping: list[AccountMappingEntry]  # pre-populated from config/account_mapping.json; empty list if no saved config
-    saved_exchange_rates: dict[str, float]            # pre-populated from config/exchange_rates.json; empty dict if no saved config
+COLUMN_MAPPINGS = {
+    "Account Number": _col_account_number,
+    "Account Name": _col_account_name,
+    "Account Type": _col_account_type,
+    "Monetary?": _col_monetary,
+    "Account Currency": _col_account_currency,
+    "Balance in Contract Currency": _col_balance_cc,
+    "Initial Measurement Company Currency Balance": _col_initial_measurement,
+    "Rate": _col_rate,
+    "Period-End Spot Exchange Rate": _col_spot_rate,
+    "Re-measured Balance": _col_remeasured_balance,
+    "FX (Gain) or Loss": _col_fx_gain_loss,
+}
 ```
 
-**`/process/{job_id}` Validation:** Returns 404 if job not found. Returns 409 if job is already processing or completed.
+Each callable: `(df: pd.DataFrame, account_mapping: list[dict], exchange_rates: list[dict]) -> pd.Series`
 
-**Error Response Structure (FR-019):**
-
-The sister project's simple `error: str` in `JobStatus` is replaced with a structured error object to support specific, actionable error messages:
-
-```python
-class ErrorDetail(BaseModel):
-    row: int
-    column: str
-    value: str
-    reason: str
-
-class ErrorResponse(BaseModel):
-    type: str          # e.g. "missing_columns", "insufficient_rows", "currency_parse", "invalid_numeric"
-    message: str       # human-readable summary
-    details: list[ErrorDetail]  # per-cell details (empty list if not applicable)
-```
-
-`JobStatus.error` uses `ErrorResponse | None` instead of `str | None`.
-
-### 4. Output: Single `.xlsx` file (not ZIP)
+### 6. Output: Single `.xlsx` file (not ZIP)
 
 Unlike the sister project which generates one file per company code and ZIPs them, this tool produces a single workbook with one worksheet per currency. No ZIP needed in Phase 1.
 
-### 5. Drop `template_header_start` / `template_data_start` from sister project
+### 7. Drop `template_header_start` / `template_data_start` from sister project
 
-The sister project's `ProcessingRequest` includes `template_header_start` and `template_data_start` for configurable output formatting. These are NOT carried over -- the FX tool's output format is fixed (headers in row 1, data from row 2) per FR-013.
+The sister project's `ProcessingRequest` includes `template_header_start` and `template_data_start` for configurable output formatting. These are NOT carried over — the FX tool's output format is fixed (headers in row 1, data from row 2) per FR-013.
 
-### 6. No i18n
+### 8. No i18n
 
 Per FR-020, English only. Remove `vue-i18n` dependency entirely. All strings are hardcoded in templates. This eliminates the `i18n/` directory, locale JSON files, `LanguageSelector.vue`, and `useI18n()` calls.
 
@@ -209,71 +233,77 @@ Per FR-020, English only. Remove `vue-i18n` dependency entirely. All strings are
 
 ```
                                           +---------------------+
-                                          |  User's Browser     |
+                                          |  User's Desktop     |
                                           |                     |
-                                          |  1. Upload CTR file |
-                                          |     (drag & drop)   |
+                                          |  Step 1: Configure  |
+                                          |   - Upload account  |
+                                          |     mapping file    |
+                                          |   - Upload exchange |
+                                          |     rates file      |
+                                          |   (Replace / Merge) |
+                                          +--------+------------+
+                                                   |
+                                          POST /config/account-mapping
+                                          POST /config/exchange-rates
+                                                   |
+                                                   v
+                                     +-------------+-------------+
+                                     |  config_store.py           |
+                                     |                           |
+                                     |  - Parse CSV/Excel file   |
+                                     |  - Apply replace/merge    |
+                                     |  - Save to JSON           |
+                                     |  - Record history entry   |
+                                     |  - Return current config  |
+                                     +-------------+-------------+
+                                                   |
+                                          (Configs saved locally)
+                                                   |
+                                                   v
+                                          +--------+------------+
+                                          |  Step 2: Upload CTR  |
+                                          |                     |
+                                          |  - Drag-and-drop    |
+                                          |    CTR report file   |
+                                          |  - Click "Process"   |
                                           +--------+------------+
                                                    |
                                           POST /upload (multipart)
                                                    |
                                                    v
                                      +-------------+-------------+
-                                     |  FastAPI Backend           |
+                                     |  ctr_reader.py             |
                                      |                           |
-                                     |  ctr_reader.py:           |
-                                     |    - Parse metadata 1-26  |
-                                     |    - Read headers row 27  |
-                                     |    - Validate core CTR    |
-                                     |      columns (shared set) |
-                                     |    - Extract unique       |
-                                     |      accounts & currencies|
+                                     |  - Parse metadata 1-26   |
+                                     |  - Read headers row 27   |
+                                     |  - Validate 9 core cols  |
+                                     |  - Normalize currencies  |
+                                     |  - Coerce numeric amounts|
                                      +-------------+-------------+
-                                                   |
-                              Response: { accounts[], currencies[], company_currency }
-                                                   |
-                                                   v
-                                          +--------+------------+
-                                          |  InputPanel.vue      |
-                                          |                     |
-                                          |  2. User fills in:  |
-                                          |   - Account Type    |
-                                          |     (BS/P&L) per GL |
-                                          |   - Monetary flag   |
-                                          |     (Yes/No) per GL |
-                                          |   - Spot rate per   |
-                                          |     currency pair   |
-                                          +--------+------------+
-                                                   |
-                                    POST /process/{job_id} (multipart form)
                                                    |
                                                    v
                                      +-------------+-------------+
                                      |  fx_processor.py (bg task)|
                                      |                           |
-                                     |  - Group by {AcctNum,     |
-                                     |    AcctName, Currency}    |
-                                     |  - Sum contract & company |
-                                     |    currency amounts       |
-                                     |  - Join account mapping   |
-                                     |  - Apply exchange rates   |
-                                     |  - Calc remeasured bal    |
-                                     |  - Calc FX gain/loss      |
-                                     |  - Write .xlsx (1 sheet   |
-                                     |    per currency)          |
+                                     |  - Load saved configs    |
+                                     |  - Group by {AcctNum,    |
+                                     |    AcctName, Currency}   |
+                                     |  - Apply COLUMN_MAPPINGS |
+                                     |    (vectorized)          |
+                                     |  - Write .xlsx (1 sheet  |
+                                     |    per currency)         |
                                      +-------------+-------------+
                                                    |
                                       GET /status/{job_id} (poll)
                                                    |
                                                    v
                                           +--------+------------+
-                                          |  ResultsSection.vue  |
+                                          |  Results View        |
                                           |                     |
-                                          |  3. Summary:        |
-                                          |   - Rows per ccy    |
-                                          |   - Warnings for    |
-                                          |     unmapped accts  |
-                                          |   - Download .xlsx  |
+                                          |  - Summary per ccy  |
+                                          |  - Warnings for     |
+                                          |    unmapped accts   |
+                                          |  - Download .xlsx   |
                                           +---------------------+
 ```
 
@@ -285,17 +315,17 @@ Rows within each worksheet are sorted by Account Number ascending (FR-010).
 |-----|--------|--------|
 | 1 | Account Number | CTR grouping key |
 | 2 | Account Name | CTR grouping key (first occurrence) |
-| 3 | Account Type | User-supplied mapping (BS / P&L) |
-| 4 | Monetary? | User-supplied mapping (Yes / No) |
+| 3 | Account Type | Account mapping config (BS / P&L) |
+| 4 | Monetary? | Account mapping config (Yes / No) |
 | 5 | Account Currency | CTR Contract Currency (worksheet name) |
 | 6 | Balance in Contract Currency | SUM(Amount in Contract Currency) per group |
 | 7 | Initial Measurement Company Currency Balance | SUM(Amount in Company Currency) per group |
 | 8 | Rate | "Historical" if non-monetary, "Period End" if monetary |
-| 9 | Period-End Spot Exchange Rate | User-supplied rate for this currency |
+| 9 | Period-End Spot Exchange Rate | Exchange rates config for this currency |
 | 10 | Re-measured Balance | col6 * col9 (monetary) or col7 (non-monetary) |
 | 11 | FX (Gain) or Loss | col10 - col7 |
 
-**Number Formatting:** Numeric output columns (6, 7, 9, 10, 11) use at least 2 decimal places formatting, consistent with the sister project's `CELL_NUMBER_FORMAT` pattern (FR-014).
+**Number Formatting:** Numeric output columns (6, 7, 9, 10, 11) use at least 2 decimal places formatting (FR-014).
 
 ### Data Quality Handling (FR-011)
 
@@ -304,7 +334,7 @@ Rows within each worksheet are sorted by Account Number ascending (FR-010).
 
 ### Unmapped Account Handling
 
-Accounts present in the CTR but missing from the user-supplied mapping:
+Accounts present in the CTR but missing from the account mapping config:
 - Columns 1-2, 5-7 are populated (aggregation works regardless)
 - Columns 3-4 show "N/A"
 - Columns 8-11 are left blank
@@ -314,4 +344,4 @@ Accounts present in the CTR but missing from the user-supplied mapping:
 ---
 
 **Document Status:** Draft
-**Last Updated:** 2026-03-20
+**Last Updated:** 2026-03-23

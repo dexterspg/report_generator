@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-CTR Mapper Application
+CTR FX Remeasurement Application
 
 A web application for processing consolidated transaction reports
-and generating formatted poliza ledger Excel files.
+and calculating FX gain/loss per GL account.
 
 Can run as:
 - Web server: python app.py
 - Desktop app: python app.py --desktop
 """
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks, Form
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -22,20 +22,23 @@ import threading
 import webbrowser
 import argparse
 from datetime import datetime
-from typing import Dict, Any
-import asyncio
+from typing import Dict
 from pathlib import Path
 import uvicorn
-import zipfile
-import shutil
 
-from services.excel_processor import ExcelProcessor
-from models.schemas import ProcessingRequest, ProcessingResponse, JobStatus
+from models.schemas import JobStatus
+from services.config_store import (
+    load_account_mapping, save_account_mapping, reset_account_mapping,
+    parse_account_mapping_file, merge_account_mapping, export_account_mapping,
+    load_exchange_rates, save_exchange_rates, reset_exchange_rates,
+    parse_exchange_rates_file, merge_exchange_rates, export_exchange_rates,
+    save_history_entry, list_history, get_history_entry, rollback_to_entry,
+)
 
 # Global mode flag
 DESKTOP_MODE = False
 
-app = FastAPI(title="CTR Mapper", version="1.0.0")
+app = FastAPI(title="CTR FX Remeasurement", version="1.0.0")
 
 # Enable CORS for frontend
 app.add_middleware(
@@ -46,20 +49,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize processor and job storage
-processor = ExcelProcessor()
+# Job storage
 jobs: Dict[str, JobStatus] = {}
 
-# Ensure upload directory exists
+
 def get_upload_dir():
-    """Get the upload directory path, handling PyInstaller executable"""
+    """Get the upload directory path, handling PyInstaller executable.
+
+    Desktop mode: %LOCALAPPDATA%/CTR-FX-Remeasurement/uploads/
+    Dev mode: backend/uploads/
+    """
     if getattr(sys, 'frozen', False):
-        # Running as PyInstaller executable
-        base_path = Path(sys.executable).parent
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if local_app_data:
+            base_path = Path(local_app_data) / "CTR-FX-Remeasurement"
+        else:
+            base_path = Path.home() / ".local" / "share" / "CTR-FX-Remeasurement"
+        base_path.mkdir(parents=True, exist_ok=True)
     else:
-        # Running as script
         base_path = Path(__file__).parent
-    
+
     upload_dir = base_path / "uploads"
     upload_dir.mkdir(exist_ok=True)
     return upload_dir
@@ -72,106 +81,261 @@ def cleanup_old_files():
     try:
         current_time = time.time()
         for file_path in UPLOAD_DIR.glob("*"):
-            if current_time - file_path.stat().st_mtime > 3600:  # 1 hour
+            if current_time - file_path.stat().st_mtime > 3600:
                 try:
                     file_path.unlink()
                 except OSError as e:
-                    # Skip files that are in use
-                    if e.errno != 32:  # Not "file in use" error
+                    if e.errno != 32:
                         print(f"Could not delete {file_path}: {e}")
     except Exception as e:
         print(f"Cleanup error: {e}")
 
 
-async def process_file_background(job_id: str, input_path: str, output_path: str,
-                                request_params: ProcessingRequest, company_code: str = None):
-    """Background task for file processing (kept for future use with single company code filter)"""
+# ---------------------------------------------------------------------------
+# Config endpoints — Account Mapping
+# ---------------------------------------------------------------------------
+
+@app.get("/config/account-mapping")
+async def get_account_mapping():
+    """Return the current saved account mapping."""
+    mapping = load_account_mapping()
+    return {
+        "success": True,
+        "count": len(mapping),
+        "mapping": mapping,
+    }
+
+
+@app.post("/config/account-mapping")
+async def upload_account_mapping(
+    file: UploadFile = File(...),
+    mode: str = Form("replace"),
+):
+    """
+    Upload an account mapping file (CSV or Excel).
+
+    Modes:
+      - "replace" — clear existing config, load from file
+      - "merge"   — add new entries, update existing entries with same Account Number
+    """
+    if not file.filename.endswith(('.xlsx', '.xls', '.csv')):
+        raise HTTPException(status_code=400, detail="Only .xlsx, .xls, and .csv files are accepted.")
+
+    if mode not in ("replace", "merge"):
+        raise HTTPException(status_code=400, detail="Mode must be 'replace' or 'merge'.")
+
+    temp_path = UPLOAD_DIR / f"{uuid.uuid4()}_{file.filename}"
     try:
-        jobs[job_id].status = "processing"
+        with open(temp_path, "wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
 
-        start_time = time.perf_counter()
-        result = processor.process_file(
-            source_file_path=input_path,
-            output_file_path=output_path,
-            input_header_start=request_params.input_header_start,
-            input_data_start=request_params.input_data_start,
-            template_header_start=request_params.template_header_start,
-            template_data_start=request_params.template_data_start,
-            company_code=company_code
-        )
-        end_time = time.perf_counter()
+        incoming, warnings = parse_account_mapping_file(str(temp_path))
 
-        jobs[job_id].completed_at = datetime.now()
-        jobs[job_id].result = result
-        jobs[job_id].result["processing_time"] = end_time - start_time
+        if not incoming:
+            raise HTTPException(status_code=400, detail=f"No valid entries found. {'; '.join(warnings)}")
 
-        if result["success"]:
-            jobs[job_id].status = "completed"
+        if mode == "merge":
+            existing = load_account_mapping()
+            final = merge_account_mapping(existing, incoming)
         else:
-            jobs[job_id].status = "failed"
-            jobs[job_id].error = result.get("error")
+            final = incoming
 
-    except Exception as e:
-        jobs[job_id].status = "failed"
-        jobs[job_id].error = str(e)
-        jobs[job_id].completed_at = datetime.now()
-        print(f"Processing error for job {job_id}: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        save_account_mapping(final)
+
+        save_history_entry(
+            action="upload",
+            config_type="account_mapping",
+            mode=mode,
+            source_filename=file.filename,
+            details={"entries_in_file": len(incoming), "total_after": len(final), "warnings": warnings},
+        )
+
+        return {
+            "success": True,
+            "mode": mode,
+            "count": len(final),
+            "new_entries": len(incoming),
+            "warnings": warnings,
+            "mapping": final,
+        }
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
 
 
-async def process_file_all_company_codes_background(job_id: str, input_path: str, output_dir: str,
-                                                     zip_path: str, request_params: ProcessingRequest):
-    """Background task for processing all company codes and creating ZIP"""
+@app.get("/config/account-mapping/download")
+async def download_account_mapping():
+    """Download the current account mapping as an Excel file for sharing."""
+    mapping = load_account_mapping()
+    if not mapping:
+        raise HTTPException(status_code=404, detail="No account mapping configured yet.")
+
+    output_path = UPLOAD_DIR / f"account_mapping_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    export_account_mapping(str(output_path))
+
+    return FileResponse(
+        path=str(output_path),
+        filename="account_mapping.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@app.delete("/config/account-mapping")
+async def delete_account_mapping():
+    """Reset (clear) the saved account mapping."""
+    save_history_entry(action="reset", config_type="account_mapping")
+    reset_account_mapping()
+    return {"success": True, "message": "Account mapping cleared."}
+
+
+# ---------------------------------------------------------------------------
+# Config endpoints — Exchange Rates
+# ---------------------------------------------------------------------------
+
+@app.get("/config/exchange-rates")
+async def get_exchange_rates():
+    """Return the current saved exchange rates."""
+    rates = load_exchange_rates()
+    return {
+        "success": True,
+        "count": len(rates),
+        "rates": rates,
+    }
+
+
+@app.post("/config/exchange-rates")
+async def upload_exchange_rates(
+    file: UploadFile = File(...),
+    mode: str = Form("replace"),
+):
+    """
+    Upload an exchange rates file (CSV or Excel).
+
+    Modes:
+      - "replace" — clear existing config, load from file
+      - "merge"   — add new currencies, update existing currencies with new rate
+    """
+    if not file.filename.endswith(('.xlsx', '.xls', '.csv')):
+        raise HTTPException(status_code=400, detail="Only .xlsx, .xls, and .csv files are accepted.")
+
+    if mode not in ("replace", "merge"):
+        raise HTTPException(status_code=400, detail="Mode must be 'replace' or 'merge'.")
+
+    temp_path = UPLOAD_DIR / f"{uuid.uuid4()}_{file.filename}"
     try:
-        jobs[job_id].status = "processing"
+        with open(temp_path, "wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
 
-        start_time = time.perf_counter()
+        incoming, warnings = parse_exchange_rates_file(str(temp_path))
 
-        # Process all company codes
-        result = processor.process_file_all_company_codes(
-            source_file_path=input_path,
-            output_dir=output_dir,
-            input_header_start=request_params.input_header_start,
-            input_data_start=request_params.input_data_start,
-            template_header_start=request_params.template_header_start,
-            template_data_start=request_params.template_data_start
+        if not incoming:
+            raise HTTPException(status_code=400, detail=f"No valid entries found. {'; '.join(warnings)}")
+
+        if mode == "merge":
+            existing = load_exchange_rates()
+            final = merge_exchange_rates(existing, incoming)
+        else:
+            final = incoming
+
+        save_exchange_rates(final)
+
+        save_history_entry(
+            action="upload",
+            config_type="exchange_rates",
+            mode=mode,
+            source_filename=file.filename,
+            details={"entries_in_file": len(incoming), "total_after": len(final), "warnings": warnings},
         )
 
-        if result["success"]:
-            # Create ZIP archive from generated files
-            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                for file_info in result["generated_files"]:
-                    file_path = file_info["file_path"]
-                    file_name = file_info["file_name"]
-                    zipf.write(file_path, file_name)
-                    # Clean up individual Excel file after adding to ZIP
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
+        return {
+            "success": True,
+            "mode": mode,
+            "count": len(final),
+            "new_entries": len(incoming),
+            "warnings": warnings,
+            "rates": final,
+        }
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
 
-            result["zip_file"] = zip_path
-            result["zip_size"] = os.path.getsize(zip_path)
 
-        end_time = time.perf_counter()
+@app.get("/config/exchange-rates/download")
+async def download_exchange_rates():
+    """Download the current exchange rates as an Excel file for sharing."""
+    rates = load_exchange_rates()
+    if not rates:
+        raise HTTPException(status_code=404, detail="No exchange rates configured yet.")
 
-        jobs[job_id].completed_at = datetime.now()
-        jobs[job_id].result = result
-        jobs[job_id].result["processing_time"] = end_time - start_time
+    output_path = UPLOAD_DIR / f"exchange_rates_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    export_exchange_rates(str(output_path))
 
-        if result["success"]:
-            jobs[job_id].status = "completed"
-        else:
-            jobs[job_id].status = "failed"
-            jobs[job_id].error = result.get("error")
+    return FileResponse(
+        path=str(output_path),
+        filename="exchange_rates.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
-    except Exception as e:
-        jobs[job_id].status = "failed"
-        jobs[job_id].error = str(e)
-        jobs[job_id].completed_at = datetime.now()
-        print(f"Processing error for job {job_id}: {str(e)}")
-        import traceback
-        traceback.print_exc()
 
+@app.delete("/config/exchange-rates")
+async def delete_exchange_rates():
+    """Reset (clear) the saved exchange rates."""
+    save_history_entry(action="reset", config_type="exchange_rates")
+    reset_exchange_rates()
+    return {"success": True, "message": "Exchange rates cleared."}
+
+
+# ---------------------------------------------------------------------------
+# History & Rollback endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/history")
+async def get_history(limit: int = 50):
+    """List config change history, most recent first."""
+    entries = list_history(limit=limit)
+    return {
+        "success": True,
+        "count": len(entries),
+        "entries": entries,
+    }
+
+
+@app.get("/history/{entry_id}")
+async def get_history_detail(entry_id: str):
+    """Get full history entry including config snapshots."""
+    entry = get_history_entry(entry_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"History entry '{entry_id}' not found.")
+    return {"success": True, "entry": entry}
+
+
+@app.post("/history/{entry_id}/rollback")
+async def rollback_config(entry_id: str, config_type: str = "both"):
+    """
+    Rollback configs to a previous history entry's snapshot.
+
+    Args:
+        entry_id: History entry ID to rollback to.
+        config_type: "account_mapping", "exchange_rates", or "both" (default).
+    """
+    if config_type not in ("account_mapping", "exchange_rates", "both"):
+        raise HTTPException(
+            status_code=400,
+            detail="config_type must be 'account_mapping', 'exchange_rates', or 'both'.",
+        )
+
+    result = rollback_to_entry(entry_id, config_type=config_type)
+    if not result["success"]:
+        raise HTTPException(status_code=404, detail=result["message"])
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Core endpoints
+# ---------------------------------------------------------------------------
 
 @app.get("/")
 async def root():
@@ -179,82 +343,7 @@ async def root():
     frontend_file = get_frontend_path() / "index.html"
     if frontend_file.exists():
         return FileResponse(str(frontend_file))
-    return {"message": "Excel Consolidation Report Mapper API", "docs": "/docs"}
-
-
-@app.post("/upload", response_model=ProcessingResponse)
-async def upload_file(
-    background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
-    input_header_start: int = Form(27),
-    input_data_start: int = Form(28),
-    template_header_start: int = Form(1),
-    template_data_start: int = Form(2),
-    company_code: str = Form(None)  # Kept for future use
-):
-    """Upload and process Excel file - generates ZIP with one file per company code"""
-
-    # Debug logging
-    print(f"Received upload request - company_code param (not used): {company_code}")
-
-    # Validate file type
-    if not file.filename.endswith(('.xlsx', '.xls')):
-        raise HTTPException(status_code=400, detail="Only Excel files (.xlsx, .xls) are allowed")
-
-    # Generate unique job ID
-    job_id = str(uuid.uuid4())
-
-    # Clean up old files
-    cleanup_old_files()
-
-    try:
-        # Save uploaded file
-        input_path = UPLOAD_DIR / f"{job_id}_input_{file.filename}"
-
-        # Create output directory for this job's Excel files
-        output_dir = UPLOAD_DIR / f"{job_id}_output"
-        output_dir.mkdir(exist_ok=True)
-
-        # ZIP file path
-        zip_path = UPLOAD_DIR / f"{job_id}_output_poliza_ledger.zip"
-
-        with open(input_path, "wb") as buffer:
-            content = await file.read()
-            buffer.write(content)
-
-        # Create job status
-        jobs[job_id] = JobStatus(
-            job_id=job_id,
-            status="pending",
-            created_at=datetime.now()
-        )
-
-        # Create processing request
-        request_params = ProcessingRequest(
-            input_header_start=input_header_start,
-            input_data_start=input_data_start,
-            template_header_start=template_header_start,
-            template_data_start=template_data_start
-        )
-
-        # Start background processing for all company codes
-        background_tasks.add_task(
-            process_file_all_company_codes_background,
-            job_id,
-            str(input_path),
-            str(output_dir),
-            str(zip_path),
-            request_params
-        )
-
-        return ProcessingResponse(
-            success=True,
-            message="File uploaded successfully. Processing started.",
-            job_id=job_id
-        )
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+    return {"message": "CTR FX Remeasurement API", "docs": "/docs"}
 
 
 @app.get("/status/{job_id}", response_model=JobStatus)
@@ -262,93 +351,7 @@ async def get_job_status(job_id: str):
     """Get processing status for a job"""
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Job not found")
-    
     return jobs[job_id]
-
-
-@app.get("/download/{job_id}")
-async def download_result(job_id: str):
-    """Download processed ZIP file containing Excel files for each company code"""
-    if job_id not in jobs:
-        raise HTTPException(status_code=404, detail="Job not found")
-
-    job = jobs[job_id]
-    if job.status != "completed":
-        raise HTTPException(status_code=400, detail="Job not completed yet")
-
-    # Check for ZIP file (new format)
-    zip_path = UPLOAD_DIR / f"{job_id}_output_poliza_ledger.zip"
-    if zip_path.exists():
-        return FileResponse(
-            path=str(zip_path),
-            filename=f"poliza_ledger_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
-            media_type="application/zip"
-        )
-
-    # Fallback to single Excel file (old format, kept for compatibility)
-    output_path = UPLOAD_DIR / f"{job_id}_output_poliza_ledger.xlsx"
-    if output_path.exists():
-        return FileResponse(
-            path=str(output_path),
-            filename=f"poliza_ledger_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-
-    raise HTTPException(status_code=404, detail="Output file not found")
-
-
-@app.post("/extract-company-codes")
-async def extract_company_codes(
-    file: UploadFile = File(...),
-    input_header_start: int = Form(27)
-):
-    """Extract unique Company Code values from uploaded Excel file"""
-    
-    # Validate file type
-    if not file.filename.endswith(('.xlsx', '.xls')):
-        raise HTTPException(status_code=400, detail="Only Excel files (.xlsx, .xls) are allowed")
-    
-    try:
-        # Save uploaded file temporarily
-        temp_id = str(uuid.uuid4())
-        temp_path = UPLOAD_DIR / f"{temp_id}_temp_{file.filename}"
-        
-        with open(temp_path, "wb") as buffer:
-            content = await file.read()
-            buffer.write(content)
-        
-        # Read the Excel file to extract Company Code values
-        import pandas as pd
-        df = pd.read_excel(temp_path, header=input_header_start - 1)
-        
-        # Check if Company Code column exists
-        if 'Company Code' not in df.columns:
-            # Clean up temp file
-            if temp_path.exists():
-                temp_path.unlink()
-            raise HTTPException(status_code=400, detail="Company Code column not found in the uploaded file")
-        
-        # Extract unique Company Code values
-        unique_company_codes = df['Company Code'].dropna().unique().tolist()
-        
-        # Sort the values for better UX
-        unique_company_codes = sorted([str(code) for code in unique_company_codes])
-        
-        # Clean up temp file
-        if temp_path.exists():
-            temp_path.unlink()
-        
-        return {
-            "success": True,
-            "company_codes": unique_company_codes,
-            "total_count": len(unique_company_codes)
-        }
-        
-    except Exception as e:
-        # Clean up temp file in case of error
-        if 'temp_path' in locals() and temp_path.exists():
-            temp_path.unlink()
-        raise HTTPException(status_code=500, detail=f"Failed to extract company codes: {str(e)}")
 
 
 @app.get("/health")
@@ -367,105 +370,91 @@ async def cleanup_files():
     """Manual cleanup endpoint"""
     try:
         cleanup_old_files()
-        # Also clean up completed jobs older than 1 hour
         current_time = datetime.now()
         to_remove = []
         for job_id, job in jobs.items():
             if job.completed_at and (current_time - job.completed_at).seconds > 3600:
                 to_remove.append(job_id)
-        
+
         for job_id in to_remove:
             del jobs[job_id]
-            
+
         return {"message": f"Cleanup completed. Removed {len(to_remove)} old jobs."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Cleanup failed: {str(e)}")
 
 
-# Mount static files for Vue.js frontend (must be after API routes)
+# ---------------------------------------------------------------------------
+# Static files & dual-mode server
+# ---------------------------------------------------------------------------
+
 def get_frontend_path():
     """Get the frontend directory path, handling PyInstaller executable"""
     if getattr(sys, 'frozen', False):
-        # Running as PyInstaller executable - frontend is in _internal
         base_path = Path(sys.executable).parent / "_internal"
     else:
-        # Running as script
         base_path = Path(__file__).parent.parent
-    
+
     return base_path / "frontend-dist"
+
 
 frontend_path = get_frontend_path()
 if frontend_path.exists():
     app.mount("/assets", StaticFiles(directory=str(frontend_path / "assets")), name="assets")
     app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="frontend")
 
+
 def open_browser(url: str):
-    """Open the default browser to the application"""
     print(f"Opening browser to: {url}")
     webbrowser.open(url)
 
 
 def run_desktop_mode():
-    """Run the application in desktop mode"""
     global DESKTOP_MODE
     DESKTOP_MODE = True
-    
+
     host = "localhost"
     port = 5001
-    
+
     print("=" * 60)
-    print("CTR Mapper Desktop Application")
+    print("CTR FX Remeasurement Desktop Application")
     print("=" * 60)
     print(f"Starting application on http://{host}:{port}")
     print("The application will open in your default browser...")
     print("Close this window to stop the application.")
     print("=" * 60)
-    
-    # Debug: Print current working directory and check frontend path
-    print(f"Current working directory: {os.getcwd()}")
-    frontend_path = get_frontend_path()
-    print(f"Frontend path: {frontend_path}")
-    print(f"Frontend exists: {frontend_path.exists()}")
-    if frontend_path.exists():
-        print(f"Frontend contents: {list(frontend_path.iterdir())}")
-    
-    # Start cleanup thread
+
     cleanup_thread = threading.Thread(target=lambda: threading.Timer(3600, cleanup_old_files).start())
     cleanup_thread.daemon = True
     cleanup_thread.start()
-    
-    # Open browser after a short delay
-    url = f"http://{host}:{port}"
-    browser_thread = threading.Timer(1.5, lambda: open_browser(url))
+
+    browser_thread = threading.Timer(1.5, lambda: open_browser(f"http://{host}:{port}"))
     browser_thread.start()
-    
-    # Run the application
+
     try:
         uvicorn.run(app, host=host, port=port, log_level="info")
     except Exception as e:
         print(f"Error starting server: {e}")
         import traceback
         traceback.print_exc()
-        input("Press Enter to exit...")  # Keep console open to see error
+        input("Press Enter to exit...")
 
 
 def run_web_mode():
-    """Run the application in web mode"""
     global DESKTOP_MODE
     DESKTOP_MODE = False
-    
+
     host = "0.0.0.0"
     port = 8000
-    
+
     print("=" * 60)
-    print("CTR Mapper Web Application")
+    print("CTR FX Remeasurement Web Application")
     print("=" * 60)
     print(f"Starting server on http://{host}:{port}")
     print("Access the application via web browser")
     print("API documentation: http://localhost:8000/docs")
     print("=" * 60)
-    
-    # Run the application
+
     if "--reload" in sys.argv:
         uvicorn.run("app:app", host=host, port=port, reload=True)
     else:
@@ -473,14 +462,12 @@ def run_web_mode():
 
 
 def main():
-    """Main application entry point"""
-    parser = argparse.ArgumentParser(description="CTR Mapper Application")
+    parser = argparse.ArgumentParser(description="CTR FX Remeasurement Application")
     parser.add_argument("--desktop", action="store_true", help="Run in desktop mode")
     args = parser.parse_args()
-    
-    # Check if running as executable (PyInstaller sets sys.frozen)
+
     is_executable = getattr(sys, 'frozen', False)
-    
+
     try:
         if args.desktop or is_executable:
             run_desktop_mode()

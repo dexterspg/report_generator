@@ -13,12 +13,6 @@ class ProcessingRequest(BaseModel):
     input_data_start: int = Field(
         default=28, description="Row number where data starts (1-indexed)"
     )
-    template_header_start: int = Field(
-        default=1, description="Output header row (1-indexed)"
-    )
-    template_data_start: int = Field(
-        default=2, description="Output data start row (1-indexed)"
-    )
 
 
 class ProcessingResponse(BaseModel):
