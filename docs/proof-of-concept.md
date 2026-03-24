@@ -1,9 +1,8 @@
 # Proof of Concept: CTR FX Remeasurement Tool
 
 **Ticket:** LAE-44136 (Abbott Laboratories)
-**Version:** 2.0
+**Author:** Dexter Pagkaliwangan
 **Date:** 2026-03-23
-**Author:** Implementation Team
 **Status:** Draft
 
 ---
@@ -66,17 +65,15 @@ A standalone desktop application that automates the end-to-end FX remeasurement 
 ## 5. Scope
 
 **In scope:**
-- CTR parsing: metadata rows 1–26, headers row 27, data from row 28
-- Column validation: detect and reject files missing required columns
-- Closing balance aggregation grouped by `{Account Number, Account Name, Contract Currency}`
+- CTR file reading and validation (detect and reject files missing required columns)
+- Closing balance aggregation by GL account and currency
 - Account mapping input: account type (BS/P&L) and monetary flag (Yes/No)
 - Exchange rate input: period-end spot rates per currency
-- FX calculation and multi-sheet output
+- FX calculation and multi-sheet Excel output
+- Standalone desktop application (.exe) that Abbott can run without installing additional software
 - Validation against Abbott's P1 manual pivot for `CTR_0422.xlsx`
 
 **Out of scope for PoC:**
-- Desktop `.exe` packaging (PyInstaller)
-- Web-based UI (Vue.js frontend)
 - Configuration history and rollback
 - Prior period FX carryforward
 - P&L account exclusion
@@ -97,7 +94,7 @@ A standalone desktop application that automates the end-to-end FX remeasurement 
 | Tools / Systems | Python 3.x, pandas, openpyxl; access to `CTR_0422.xlsx` |
 | Data | `CTR_0422.xlsx`, account mapping file, P1 exchange rates file, Abbott's manual pivot worksheet |
 | Budget | Minimal — existing tooling and licenses; no new spend required |
-| Time | Estimated 3–5 days to build and validate |
+| Time | Estimated 8-9 weeks to build and validate; 1-2 additional weeks for client review and sign-off |
 
 ---
 
@@ -138,10 +135,15 @@ The PoC is considered **failed** if:
 | Milestone | Target Date |
 |-----------|------------|
 | Abbott supplies CTR, mapping, and rates files | 2026-03-25 |
-| PoC build complete (parser + calculator + output) | 2026-03-27 |
-| Internal validation run | 2026-03-28 |
-| Abbott review and sign-off | 2026-03-31 |
-| Go / No-Go decision | 2026-04-01 |
+| CTR file reading and validation complete | 2026-04-01 |
+| Aggregation and FX calculation engine complete | 2026-04-08 |
+| Excel output writer complete | 2026-04-14 |
+| Backend API complete | 2026-04-28 |
+| Frontend interface complete | 2026-05-19 |
+| Desktop application packaging complete | 2026-05-23 |
+| Internal validation and bug fixes | 2026-06-03 |
+| Abbott review and sign-off | 2026-06-13 |
+| Go / No-Go decision | 2026-06-17 |
 
 ---
 
@@ -156,34 +158,30 @@ The PoC is considered **failed** if:
 
 ---
 
-## 11. Technical Reference
+## 11. How It Works
 
-### Processing Pipeline
+### Processing Steps
 
 ```
-CTR File (.xlsx)
-      │
-      ▼
- ctr_reader.py
-  - Extract metadata (rows 1–26)
-  - Read headers (row 27)
-  - Validate 9 required columns
-  - Normalize currencies to uppercase
-  - Coerce numeric amounts; skip/warn bad rows
-      │
-      ▼
- fx_processor.py
-  - Group by {Account Number, Account Name, Contract Currency}
-  - Aggregate balance_cc and initial_measurement
-  - Apply account type + monetary flag from mapping
-  - Apply spot rate from exchange rates config
-  - Re-measured Balance = balance_cc × spot_rate (monetary)
-                        = initial_measurement (non-monetary)
-  - FX (Gain)/Loss = Re-measured Balance − Initial Measurement
-  - Write one worksheet per currency (sorted by Account Number)
-      │
-      ▼
- CTR_FX_Remeasurement_{FY}_{FP}_{Timestamp}.xlsx
+Step 1: Upload CTR Export
+  - The tool reads the CTR Excel file exported from Nakisa
+  - Validates that all required columns are present
+  - Flags any rows with missing or invalid data
+
+Step 2: Apply Configuration
+  - Reads the account mapping file (account type + monetary flag)
+  - Reads the exchange rates file (period-end spot rates per currency)
+
+Step 3: Calculate FX Remeasurement
+  - Aggregates closing balances by GL account and currency
+  - Applies the period-end spot rate to monetary accounts
+  - Preserves historical rates for non-monetary accounts
+  - Calculates the FX (Gain) or Loss per account
+
+Step 4: Generate Output
+  - Produces an Excel workbook with one worksheet per currency
+  - Accounts sorted by Account Number within each sheet
+  - Unmapped accounts flagged clearly for review
 ```
 
 ### Key Formula
@@ -210,7 +208,7 @@ CTR File (.xlsx)
 
 **Go — pending Abbott sign-off**
 
-The problem is well-defined, the calculation logic is deterministic, and the expected output (Abbott's manual pivot) is already available for validation. The implementation risk is low. If the PoC run confirms that calculated FX values match Abbott's manual worksheet, the decision is to proceed immediately to building the full desktop application (FastAPI backend + Vue 3 frontend + PyInstaller packaging).
+The problem is well-defined, the calculation logic is deterministic, and the expected output (Abbott's manual pivot) is already available for validation. The implementation risk is low. If the PoC run confirms that calculated FX values match Abbott's manual worksheet, the decision is to proceed with the full build and rollout to Abbott.
 
 ---
 

@@ -131,28 +131,29 @@ Today, getting to that number is entirely manual:
 
 ### Processing Logic
 
-**FR-006:** The system shall group input records by {Account Number, Account Name, Contract Currency} and aggregate:
+**FR-006:** The system shall group input records by {Contract ID, Account Number, Account Name, Contract Currency} and aggregate:
 - Sum of Amount in Contract Currency → "Balance in Contract Currency"
 - Sum of Amount in Company Currency → "Initial Measurement Company Currency Balance"
 
 **FR-007:** The system shall create one output worksheet per unique Contract Currency found in the input, named by currency code (e.g., "USD", "EUR", "GBP").
 
 **FR-008:** The system shall output the following columns:
-1. Account Number
-2. Account Name
-3. Account Type — from user-supplied account mapping (BS or P&L)
-4. Monetary? — from user-supplied account mapping (Yes/No)
-5. Account Currency
-6. Balance in Contract Currency — aggregated from CTR
-7. Initial Measurement Company Currency Balance — aggregated from CTR
-8. Rate — "Historical" for non-monetary accounts, "Period End" for monetary accounts
-9. Period-End Spot Exchange Rate — from user-supplied rates
-10. Re-measured Balance — col6 × col9 for monetary accounts, or = col7 for non-monetary accounts
-11. FX (Gain) or Loss — col10 − col7 (the primary deliverable)
+1. Contract ID — from CTR grouping key
+2. Account Number
+3. Account Name
+4. Account Type — from user-supplied account mapping
+5. Monetary? — from user-supplied account mapping (Monetary/Non-Monetary)
+6. Account Currency
+7. Balance in Contract Currency — aggregated from CTR
+8. Initial Measurement Company Currency Balance — aggregated from CTR
+9. Rate — from user-supplied account mapping (Historical or Period End)
+10. Period-End Spot Exchange Rate — from user-supplied exchange rates (matched by FromCurrency → contract currency and ToCurrency → company currency)
+11. Re-measured Balance — col7 × col10 for monetary accounts, or = col8 for non-monetary accounts
+12. FX (Gain) or Loss — col11 − col8 (the primary deliverable)
 
 **FR-009:** The system shall accept two configuration inputs, both supplied as file uploads (`.xlsx`, `.xls`, or `.csv`):
-- **Account mapping** — maps Account Number to Account Type (BS/P&L) and Monetary flag (Yes/No). Uploaded as a file with columns: `Account Number`, `Account Type`, `Monetary`. Supports two upload modes: **Replace** (clear existing, load from file) and **Merge** (add new entries, update existing entries with the same Account Number). The current mapping can be downloaded as an Excel file for sharing with other users. A Reset button clears all saved mapping data.
-- **Period-end exchange rates** — spot rate per currency pair. Uploaded as a file with columns: `Currency` and `Rate`. Supports the same **Replace** and **Merge** upload modes. The current rates can be downloaded as an Excel file for sharing. A Reset button clears all saved rate data.
+- **Account mapping** — maps Account Number to Account Type, Monetary classification, and Rate method. Uploaded as a file with columns: `Account Number`, `Account Type`, `Monetary?`, `Rate`. The Rate column specifies whether the account uses "Historical" or "Period End" rates. Supports two upload modes: **Replace** (clear existing, load from file) and **Merge** (add new entries, update existing entries with the same Account Number). The current mapping can be downloaded as an Excel file for sharing with other users. A Reset button clears all saved mapping data.
+- **Period-end exchange rates** — spot rates per currency pair. Uploaded as a file with columns: `ObjectId`, `RateType`, `FromCurrency`, `ToCurrency`, `ValidFrom`, `ExchangeRate`. `ObjectId` is used internally for duplicate detection and is not displayed in the UI. The system matches `FromCurrency` to the account's contract currency and `ToCurrency` to the company currency to find the correct spot rate. Supports the same **Replace** and **Merge** upload modes. The current rates can be downloaded as an Excel file for sharing. A Reset button clears all saved rate data.
 
 Both configuration files are independent of the CTR report — they can be uploaded, downloaded, shared, and managed before any CTR file is processed.
 
@@ -165,7 +166,7 @@ Both configuration files are independent of the CTR report — they can be uploa
 **FR-012:** The system shall generate an Excel workbook (`.xlsx`) with one or more worksheets (one per currency).
 
 **FR-013:** Each worksheet shall include:
-- A header row containing all 11 columns (even if Phase 1 leaves columns 8-11 empty)
+- A header row containing all 12 columns (Contract ID through FX Gain/Loss)
 - Data rows starting immediately after headers (row 2)
 - No metadata or non-tabular content in the output sheet
 
@@ -180,7 +181,7 @@ Both configuration files are independent of the CTR report — they can be uploa
 **FR-017:** The application shall follow a two-step configure-then-process workflow:
 - **Step 1 — Configuration:** User manages two configuration files (account mapping and exchange rates) via upload, download, replace, merge, and reset operations. Each config shows a preview table of the current saved data. Configs persist locally and are available across sessions.
 - **Step 2 — Upload & Process:** User uploads the CTR report file. The Process button is disabled until both configurations are loaded. Processing runs asynchronously with job ID and status polling.
-- Download button upon completion.
+- **Results:** Upon completion, the results view shows a summary (input rows, output rows, currencies) and a download button. No detailed output table or warnings are displayed in the UI — the full output is in the downloaded Excel file.
 
 **FR-018:** The application shall support both desktop mode (primary — single-user, `localhost:5001`, auto-opens browser) and web mode (secondary — multi-user server, `0.0.0.0:8000`). Desktop mode is the primary deployment target.
 
@@ -223,7 +224,7 @@ Both configuration files are independent of the CTR report — they can be uploa
 - Timestamp, action type, config type affected, source filename (if applicable)
 - A full snapshot of both configuration files at the time of the action
 
-**FR-029:** The system shall allow users to view the history of configuration changes (most recent first) and rollback to any previous entry's snapshot. Rollback restores the selected configuration(s) to the state captured in that history entry. The rollback action itself is also recorded in history.
+**FR-029:** The system shall display the history of configuration changes as a read-only table (most recent first) with columns: Timestamp, Action, Config, Details. Rollback is performed manually by the user navigating to the history folder and deleting the most recent entry. The UI does not provide a rollback button — this is a Phase 2 feature.
 
 **FR-030:** History data shall be stored locally alongside configuration data (same `%LOCALAPPDATA%` path for desktop, same backend directory for dev).
 
@@ -286,7 +287,7 @@ Both configuration files are independent of the CTR report — they can be uploa
 
 **Given** an account that appears in the CTR but is missing from the account mapping
 **When** processed
-**Then** the system shall flag it with a warning; columns 3-4 (Account Type, Monetary) shall show "N/A" and columns 8-11 (Rate, Spot Rate, Re-measured Balance, FX Gain/Loss) shall be left blank for that account
+**Then** the system shall flag it in the output; columns 4-5 (Account Type, Monetary?) shall show "N/A" and columns 9-12 (Rate, Spot Rate, Re-measured Balance, FX Gain/Loss) shall be left blank for that account
 
 ### US-04: Multi-Sheet Output by Currency
 
@@ -365,10 +366,11 @@ Both configuration files are independent of the CTR report — they can be uploa
 - Accept account mapping as file upload (CSV/Excel) with replace/merge modes
 - Accept period-end exchange rates as file upload (CSV/Excel) with replace/merge modes
 - Download current configs as Excel for sharing between desktop users
-- Apply rate logic: period-end rate for monetary accounts, historical rate for non-monetary
-- Calculate Re-measured Balance (col6 × spot rate for monetary, = col7 for non-monetary)
-- **Calculate FX (Gain) or Loss per account (col10 − col7) — the primary deliverable**
-- Create one worksheet per unique currency with all 11 columns populated
+- Apply rate logic based on the Rate column in account mapping (Historical or Period End)
+- Look up spot exchange rate by matching FromCurrency → contract currency and ToCurrency → company currency
+- Calculate Re-measured Balance (col7 × spot rate for Period End accounts, = col8 for Historical accounts)
+- **Calculate FX (Gain) or Loss per account (col11 − col8) — the primary deliverable**
+- Create one worksheet per unique currency with all 12 columns populated (including Contract ID)
 - Sort by Account Number
 - Build standalone desktop application (`.exe` via PyInstaller) with configure-upload-process-download workflow
 - Local configuration history with rollback capability
@@ -394,8 +396,8 @@ Both configuration files are independent of the CTR report — they can be uploa
   - Client provides via manual export
 
 ### Additional Inputs (Phase 1) — Configuration Files
-- **Account mapping** — Account Type (BS/P&L) and Monetary flag (Yes/No) per GL account. Uploaded as CSV or Excel file with columns: `Account Number`, `Account Type`, `Monetary`. Supports Replace and Merge upload modes. Downloadable as Excel for sharing.
-- **Period-end exchange rates** — spot rate per currency pair. Uploaded as CSV or Excel file with columns: `Currency` and `Rate`. Supports Replace and Merge upload modes. Downloadable as Excel for sharing.
+- **Account mapping** — Account Type, Monetary classification, and Rate method per GL account. Uploaded as CSV or Excel file with columns: `Account Number`, `Account Type`, `Monetary?`, `Rate`. Supports Replace and Merge upload modes. Downloadable as Excel for sharing.
+- **Period-end exchange rates** — spot rates per currency pair. Uploaded as CSV or Excel file with columns: `ObjectId`, `RateType`, `FromCurrency`, `ToCurrency`, `ValidFrom`, `ExchangeRate`. `ObjectId` is used for duplicate detection (hidden in UI). The system matches `FromCurrency` to the contract currency and `ToCurrency` to the company currency. Supports Replace and Merge upload modes. Downloadable as Excel for sharing.
 
 ### Local Configuration Storage
 - **Account mapping config** — JSON file in `%LOCALAPPDATA%/CTR-FX-Remeasurement/config/`; updated on every upload, merge, reset, or rollback; survives application restarts and `.exe` updates.
@@ -483,5 +485,5 @@ Both configuration files are independent of the CTR report — they can be uploa
 ---
 
 **Document Status:** Draft
-**Last Updated:** 2026-03-23
+**Last Updated:** 2026-03-24
 **Next Review:** Upon implementation kickoff

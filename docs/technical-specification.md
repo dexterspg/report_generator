@@ -25,18 +25,23 @@ FastAPI + Vue 3 (Options API with Composition `setup()`) + openpyxl. Background 
    - Apply period-end exchange rates per currency pair
    - Calculate Re-measured Balance: `balance_cc * spot_rate` (monetary) or `initial_measurement` (non-monetary)
    - Calculate FX (Gain) or Loss: `remeasured_balance - initial_measurement`
-   - Output 11-column workbook with one worksheet per unique Contract Currency
+   - Output 12-column workbook (Contract ID + 11 data columns) with one worksheet per unique Contract Currency
 
 2. **File-based configuration management** (replaces single-file upload + editable table approach)
    - Both configs (account mapping + exchange rates) managed as uploadable/downloadable CSV/Excel files
+   - Account mapping columns: `Account Number`, `Account Type`, `Monetary?`, `Rate` (4 columns)
+   - Exchange rates columns: `ObjectId` (hidden, for duplicate detection), `RateType`, `FromCurrency`, `ToCurrency`, `ValidFrom`, `ExchangeRate` (6 columns, 5 visible in UI)
+   - Exchange rate lookup: match `FromCurrency` → account's contract currency, `ToCurrency` → company currency
    - Two upload modes: **Replace** (overwrite all) and **Merge** (add new + update existing by key)
    - Download current config as styled Excel for sharing between desktop users
    - Reset capability to clear all saved data per config type
    - Internal persistence as JSON files in `%LOCALAPPDATA%/CTR-FX-Remeasurement/config/`
 
-3. **Configuration history with rollback**
-   - Every config change (upload, reset, rollback) recorded as a history entry with full snapshots
-   - Users can view history and rollback to any previous state
+3. **Configuration history (view-only)**
+   - Every config change (upload, reset) recorded as a history entry with full snapshots
+   - Users can view history as a read-only table (Timestamp, Action, Config, Details)
+   - Rollback is manual: user navigates to the history folder and deletes the most recent entry
+   - No rollback button in the UI (Phase 2 feature)
    - Stored as individual JSON files in `%LOCALAPPDATA%/CTR-FX-Remeasurement/history/`
 
 4. **Frontend redesign** (clean, purpose-built)
@@ -44,7 +49,7 @@ FastAPI + Vue 3 (Options API with Composition `setup()`) + openpyxl. Background 
    - No i18n (English only per FR-020) — removed `vue-i18n` dependency entirely
    - No `HelpGuide` modal or `LanguageSelector` component
    - Two-step UI: Step 1 (Configuration) with side-by-side account mapping + exchange rates panels, Step 2 (Upload CTR) with drag-and-drop
-   - New results view showing per-currency summary with warnings for unmapped accounts
+   - Simplified results view: summary stats (input rows, output rows, currencies) + download button only. No multi-currency table preview or warnings in the UI
 
 5. **CSV support** (FR-001, FR-024) — `pandas.read_csv()` path alongside Excel
 
@@ -79,7 +84,7 @@ webapp/
       __init__.py
       ctr_reader.py                 -- Shared CTR parsing layer. Validates 9 core columns, extracts metadata from rows 1-26 (Excel only), normalizes currencies, fills missing Account Names, coerces numeric amounts, detects conflicting Account Names. CSV returns None for metadata fields.
       fx_processor.py               -- FX Remeasurement engine using COLUMN_MAPPINGS dict pattern. Each column is a callable taking (df, account_mapping, exchange_rates) → pd.Series. Uses numpy vectorized operations (np.where) instead of row-by-row iteration.
-      config_store.py               -- Config persistence + file parsing/export + history/rollback. Key functions:
+      config_store.py               -- Config persistence + file parsing/export + history. Key functions:
                                        - _get_app_data_dir() → resolves %LOCALAPPDATA% (desktop) or backend/ (dev)
                                        - load/save/reset_account_mapping(), load/save/reset_exchange_rates()
                                        - parse_account_mapping_file(), parse_exchange_rates_file() — parse CSV/Excel with flexible column name aliases
@@ -125,13 +130,13 @@ webapp/
 | `GET` | `/config/exchange-rates/download` | Download current rates as styled Excel file |
 | `DELETE` | `/config/exchange-rates` | Reset (clear) all saved exchange rate data |
 
-### History & Rollback
+### History
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/history` | List config change history (most recent first). Query param: `limit` (default 50) |
+| `GET` | `/history` | List config change history (most recent first). Query param: `limit` (default 50). Returns: timestamp, action, config_type, details |
 | `GET` | `/history/{entry_id}` | Get full history entry including config snapshots |
-| `POST` | `/history/{entry_id}/rollback` | Rollback configs to a previous entry's snapshot. Query param: `config_type` ("account_mapping", "exchange_rates", or "both") |
+| `POST` | `/history/{entry_id}/rollback` | Rollback configs to a previous entry's snapshot. Query param: `config_type` ("account_mapping", "exchange_rates", or "both"). **Note:** Backend API retained for Phase 2 — not exposed in the Phase 1 UI |
 
 ### Core Processing
 
@@ -151,7 +156,7 @@ webapp/
 **Why:** The application is a standalone desktop tool distributed as a `.exe`. Multiple team members on different laptops need to share the same account mapping. A file-based approach (upload CSV/Excel, download to share) is simpler than an editable UI table and supports the desktop sharing model naturally.
 
 **How it works:**
-- User uploads a CSV or Excel file with columns: `Account Number`, `Account Type` (BS/P&L), `Monetary` (Yes/No)
+- User uploads a CSV or Excel file with columns: `Account Number`, `Account Type`, `Monetary?` (Monetary/Non-Monetary), `Rate` (Historical/Period End)
 - Column names are matched flexibly (e.g., "Acct Num", "Account No.", "account_number" all work)
 - Upload mode is either **Replace** (clear existing, load from file) or **Merge** (add new, update existing by Account Number)
 - Current mapping is always viewable via `GET /config/account-mapping` and downloadable as a styled Excel file via `GET /config/account-mapping/download`
@@ -163,7 +168,9 @@ webapp/
 **Why:** Same rationale as account mapping — file-based for desktop sharing. Clients already maintain rate tables in Excel.
 
 **How it works:**
-- User uploads a CSV or Excel file with columns: `Currency` and `Rate`
+- User uploads a CSV or Excel file with columns: `ObjectId`, `RateType`, `FromCurrency`, `ToCurrency`, `ValidFrom`, `ExchangeRate`
+- `ObjectId` is used internally for duplicate detection and is hidden in the UI
+- The system finds the correct rate by matching `FromCurrency` to the account's contract currency and `ToCurrency` to the company currency (from CTR metadata)
 - Same Replace/Merge upload modes as account mapping
 - Same download, reset, and history tracking capabilities
 - Currency codes normalized to uppercase; rates parsed as floats
@@ -188,11 +195,12 @@ webapp/
 **Why:** Users may accidentally upload wrong configs (wrong file, wrong mode). Without rollback, they'd need to re-upload the correct file — which they may not have readily available. History snapshots capture the full state at each change, allowing recovery.
 
 **How it works:**
-- `save_history_entry()` is called on every config change (upload, reset, rollback)
+- `save_history_entry()` is called on every config change (upload, reset)
 - Each entry stores: timestamp, action, config_type, source_filename, details, plus full snapshots of both `account_mapping.json` and `exchange_rates.json` at that moment
-- `list_history()` returns summaries (without bulky snapshots) for display
-- `get_history_entry()` returns the full entry including snapshots
-- `rollback_to_entry()` restores one or both configs from the snapshot, and records the rollback as a new history entry
+- `list_history()` returns summaries (without bulky snapshots) for display as a read-only table
+- UI displays: Timestamp, Action, Config, Details — no rollback button
+- Rollback is manual: user navigates to the history folder (`%LOCALAPPDATA%/CTR-FX-Remeasurement/history/`) and deletes the most recent JSON file to revert
+- Programmatic rollback via API (`rollback_to_entry()`) is retained in the backend for Phase 2 UI support
 
 ### 5. COLUMN_MAPPINGS Vectorized Pattern in fx_processor.py
 
@@ -201,6 +209,7 @@ webapp/
 **Structure:**
 ```python
 COLUMN_MAPPINGS = {
+    "Contract ID": _col_contract_id,
     "Account Number": _col_account_number,
     "Account Name": _col_account_name,
     "Account Type": _col_account_type,
@@ -208,8 +217,8 @@ COLUMN_MAPPINGS = {
     "Account Currency": _col_account_currency,
     "Balance in Contract Currency": _col_balance_cc,
     "Initial Measurement Company Currency Balance": _col_initial_measurement,
-    "Rate": _col_rate,
-    "Period-End Spot Exchange Rate": _col_spot_rate,
+    "Rate": _col_rate,                          # from account mapping (Historical / Period End)
+    "Period-End Spot Exchange Rate": _col_spot_rate,  # matched by FromCurrency + ToCurrency
     "Re-measured Balance": _col_remeasured_balance,
     "FX (Gain) or Loss": _col_fx_gain_loss,
 }
@@ -300,9 +309,8 @@ Per FR-020, English only. Remove `vue-i18n` dependency entirely. All strings are
                                           +--------+------------+
                                           |  Results View        |
                                           |                     |
-                                          |  - Summary per ccy  |
-                                          |  - Warnings for     |
-                                          |    unmapped accts   |
+                                          |  - Summary stats    |
+                                          |    (rows, ccys)     |
                                           |  - Download .xlsx   |
                                           +---------------------+
 ```
@@ -313,19 +321,20 @@ Rows within each worksheet are sorted by Account Number ascending (FR-010).
 
 | Col | Header | Source |
 |-----|--------|--------|
-| 1 | Account Number | CTR grouping key |
-| 2 | Account Name | CTR grouping key (first occurrence) |
-| 3 | Account Type | Account mapping config (BS / P&L) |
-| 4 | Monetary? | Account mapping config (Yes / No) |
-| 5 | Account Currency | CTR Contract Currency (worksheet name) |
-| 6 | Balance in Contract Currency | SUM(Amount in Contract Currency) per group |
-| 7 | Initial Measurement Company Currency Balance | SUM(Amount in Company Currency) per group |
-| 8 | Rate | "Historical" if non-monetary, "Period End" if monetary |
-| 9 | Period-End Spot Exchange Rate | Exchange rates config for this currency |
-| 10 | Re-measured Balance | col6 * col9 (monetary) or col7 (non-monetary) |
-| 11 | FX (Gain) or Loss | col10 - col7 |
+| 1 | Contract ID | CTR grouping key |
+| 2 | Account Number | CTR grouping key |
+| 3 | Account Name | CTR grouping key (first occurrence) |
+| 4 | Account Type | Account mapping config |
+| 5 | Monetary? | Account mapping config (Monetary / Non-Monetary) |
+| 6 | Account Currency | CTR Contract Currency (worksheet name) |
+| 7 | Balance in Contract Currency | SUM(Amount in Contract Currency) per group |
+| 8 | Initial Measurement Company Currency Balance | SUM(Amount in Company Currency) per group |
+| 9 | Rate | Account mapping config (Historical / Period End) |
+| 10 | Period-End Spot Exchange Rate | Exchange rates config (matched by FromCurrency → contract ccy, ToCurrency → company ccy) |
+| 11 | Re-measured Balance | col7 * col10 (Period End) or col8 (Historical) |
+| 12 | FX (Gain) or Loss | col11 - col8 |
 
-**Number Formatting:** Numeric output columns (6, 7, 9, 10, 11) use at least 2 decimal places formatting (FR-014).
+**Number Formatting:** Numeric output columns (7, 8, 10, 11, 12) use at least 2 decimal places formatting (FR-014).
 
 ### Data Quality Handling (FR-011)
 
@@ -335,13 +344,12 @@ Rows within each worksheet are sorted by Account Number ascending (FR-010).
 ### Unmapped Account Handling
 
 Accounts present in the CTR but missing from the account mapping config:
-- Columns 1-2, 5-7 are populated (aggregation works regardless)
-- Columns 3-4 show "N/A"
-- Columns 8-11 are left blank
-- A warning appears in the results view listing the unmapped accounts
+- Columns 1-3, 6-8 are populated (aggregation works regardless)
+- Columns 4-5 show "N/A"
+- Columns 9-12 are left blank
 - The output Excel includes these rows so the user can see what was missed
 
 ---
 
 **Document Status:** Draft
-**Last Updated:** 2026-03-23
+**Last Updated:** 2026-03-24
