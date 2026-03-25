@@ -171,7 +171,7 @@ def _col_fx_gain_loss(df, mapping, rates):
         _col_remeasured_balance(df, mapping, rates), errors="coerce"
     )
     return np.where(
-        remeasured.isna(),
+        pd.isna(remeasured),
         None,
         remeasured - df["initial_measurement"],
     )

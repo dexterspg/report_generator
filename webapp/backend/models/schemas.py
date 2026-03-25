@@ -20,7 +20,10 @@ class ProcessingResponse(BaseModel):
     job_id: Optional[str] = None
     input_rows: Optional[int] = None
     output_rows: Optional[int] = None
-    file_size: Optional[int] = None
+    sheets: Optional[list] = None
+    unmapped_accounts: Optional[list] = None
+    missing_rate_currencies: Optional[list] = None
+    warnings: Optional[list] = None
     processing_time: Optional[float] = None
     error: Optional[str] = None
 

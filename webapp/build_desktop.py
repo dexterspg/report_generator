@@ -1,218 +1,281 @@
 #!/usr/bin/env python3
 """
-Build script for CTR Mapper Desktop Application (Combined Version)
+Build script for CTR FX Remeasurement Desktop Application
 
-This script creates a standalone executable using PyInstaller from the webapp code.
+Run from the webapp/ directory:
+    python build_desktop.py
+
+Steps:
+  1. Build Vue frontend  (npm run build in frontend-vue/)
+  2. Run PyInstaller     (from backend/)
+  3. Package into a zip  (CTR_FX_Remeasurement_vX.Y.Z.zip)
+
+Output:
+  backend/dist/CTR_FX_Remeasurement/CTR_FX_Remeasurement.exe
 """
 
 import os
 import sys
 import shutil
 import subprocess
+import zipfile
 from pathlib import Path
 
-def clean_build():
-    """Clean previous build artifacts"""
-    print("Cleaning previous build artifacts...")
-    
-    # Remove build directories
-    for dir_name in ['build', 'dist', '__pycache__']:
-        if os.path.exists(dir_name):
-            shutil.rmtree(dir_name)
-            print(f"Removed {dir_name}/")
-    
-    # Remove spec file
-    spec_file = 'app.spec'
-    if os.path.exists(spec_file):
-        os.remove(spec_file)
-        print(f"Removed {spec_file}")
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
+
+APP_NAME = "CTR_FX_Remeasurement"
+APP_VERSION = "1.0.0"
+WEBAPP_DIR = Path(__file__).parent.resolve()
+BACKEND_DIR = WEBAPP_DIR / "backend"
+FRONTEND_VUE_DIR = WEBAPP_DIR / "frontend-vue"
+FRONTEND_DIST_DIR = WEBAPP_DIR / "frontend-dist"
+DIST_DIR = BACKEND_DIR / "dist" / APP_NAME
+PACKAGE_NAME = f"{APP_NAME}_v{APP_VERSION}"
 
 
-def ensure_frontend_built():
-    """Ensure frontend is built"""
-    frontend_dist = Path("../frontend-dist")
-    if not frontend_dist.exists():
-        print("Frontend not built. Building now...")
-        try:
-            subprocess.run(["npm", "run", "build"], cwd="../frontend-vue", check=True)
-            print("✓ Frontend built successfully")
-        except subprocess.CalledProcessError:
-            print("✗ Failed to build frontend. Please run 'npm run build' in frontend-vue/")
-            return False
-    return True
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def step(msg: str) -> None:
+    print(f"\n{'='*60}")
+    print(f"  {msg}")
+    print(f"{'='*60}")
 
 
-def create_executable():
-    """Create the executable using PyInstaller"""
-    print("Creating executable with PyInstaller...")
-    
-    # PyInstaller command
+def ok(msg: str) -> None:
+    print(f"  OK  {msg}")
+
+
+def fail(msg: str) -> None:
+    print(f"  FAIL  {msg}")
+
+
+def run(cmd, cwd=None, shell=False):
+    """Run a command, raise on non-zero exit."""
+    result = subprocess.run(cmd, cwd=cwd, shell=shell)
+    if result.returncode != 0:
+        raise RuntimeError(f"Command failed: {' '.join(str(c) for c in cmd)}")
+
+
+# ---------------------------------------------------------------------------
+# Step 1: Build Vue frontend
+# ---------------------------------------------------------------------------
+
+def build_frontend():
+    step("Step 1 — Build Vue frontend")
+
+    if not FRONTEND_VUE_DIR.exists():
+        raise RuntimeError(f"frontend-vue/ not found at {FRONTEND_VUE_DIR}")
+
+    # Clean old dist
+    if FRONTEND_DIST_DIR.exists():
+        shutil.rmtree(FRONTEND_DIST_DIR)
+        ok("Removed old frontend-dist/")
+
+    npm = "npm.cmd" if sys.platform == "win32" else "npm"
+    run([npm, "install"], cwd=FRONTEND_VUE_DIR)
+    ok("npm install done")
+
+    run([npm, "run", "build"], cwd=FRONTEND_VUE_DIR)
+    ok(f"Frontend built -> {FRONTEND_DIST_DIR}")
+
+
+# ---------------------------------------------------------------------------
+# Step 2: Build .exe with PyInstaller
+# ---------------------------------------------------------------------------
+
+def build_exe():
+    step("Step 2 — Build .exe with PyInstaller")
+
+    if not FRONTEND_DIST_DIR.exists():
+        raise RuntimeError("frontend-dist/ not found — run Step 1 first")
+
+    # Clean old PyInstaller outputs
+    for artifact in ["build", "dist", f"{APP_NAME}.spec"]:
+        path = BACKEND_DIR / artifact
+        if path.exists():
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+    ok("Cleaned old build/dist/spec")
+
+    # --add-data uses os.pathsep as separator (';' on Windows, ':' on Unix)
+    sep = os.pathsep
+
+    # frontend-dist is one level up from backend/; destination inside _internal/
+    frontend_src = str(FRONTEND_DIST_DIR)
+    frontend_dst = "frontend-dist"
+
     cmd = [
-        'pyinstaller',
-        '--onedir',                         # Create directory distribution (better compatibility)
-        '--console',                        # Show console window for debugging
-        '--name=CTR_Mapper',               # Executable name
-        '--add-data=../frontend-dist;frontend-dist',  # Include frontend
-        '--add-data=services;services',     # Include services
-        '--add-data=models;models',         # Include models
-        '--hidden-import=pandas',           # Ensure pandas is included
-        '--hidden-import=openpyxl',         # Ensure openpyxl is included
-        '--hidden-import=numpy',            # Ensure numpy is included
-        '--hidden-import=fastapi',          # Ensure fastapi is included
-        '--hidden-import=uvicorn',          # Ensure uvicorn is included
-        '--hidden-import=pydantic',         # Ensure pydantic is included
-        '--hidden-import=uvicorn.workers',  # Include uvicorn workers
-        '--hidden-import=uvicorn.protocols', # Include uvicorn protocols
-        '--hidden-import=uvicorn.lifespan',  # Include uvicorn lifespan
-        '--hidden-import=multipart',        # For file uploads
-        '--hidden-import=starlette',        # FastAPI dependency
-        '--hidden-import=email_validator',  # Pydantic dependency
-        '--collect-all=fastapi',            # Collect all fastapi modules
-        '--collect-all=uvicorn',            # Collect all uvicorn modules
-        '--collect-all=pydantic',           # Collect all pydantic modules
-        '--collect-all=starlette',          # Collect all starlette modules
-        '--collect-all=pandas',             # Collect all pandas modules
-        '--collect-all=openpyxl',           # Collect all openpyxl modules
-        '--collect-all=numpy',              # Collect all numpy modules
-        '--noconfirm',                      # Don't ask for confirmation
-        '--clean',                          # Clean cache
-        'app.py',                           # Main script
-        '--',                               # Pass arguments to script
-        '--desktop'                         # Run in desktop mode
+        sys.executable, "-m", "PyInstaller",
+        "--onedir",
+        "--console",                            # show console for debugging (change to --noconsole for release)
+        f"--name={APP_NAME}",
+        f"--add-data={frontend_src}{sep}{frontend_dst}",
+        f"--add-data=services{sep}services",
+        f"--add-data=models{sep}models",
+        # Hidden imports — uvicorn internals that PyInstaller misses
+        "--hidden-import=uvicorn.logging",
+        "--hidden-import=uvicorn.loops",
+        "--hidden-import=uvicorn.loops.auto",
+        "--hidden-import=uvicorn.loops.asyncio",
+        "--hidden-import=uvicorn.protocols",
+        "--hidden-import=uvicorn.protocols.http",
+        "--hidden-import=uvicorn.protocols.http.auto",
+        "--hidden-import=uvicorn.protocols.http.h11_impl",
+        "--hidden-import=uvicorn.protocols.websockets",
+        "--hidden-import=uvicorn.protocols.websockets.auto",
+        "--hidden-import=uvicorn.lifespan",
+        "--hidden-import=uvicorn.lifespan.on",
+        "--hidden-import=uvicorn.lifespan.off",
+        # multipart (file uploads)
+        "--hidden-import=multipart",
+        "--hidden-import=python_multipart",
+        # pydantic v2
+        "--hidden-import=pydantic",
+        "--hidden-import=pydantic.deprecated.class_validators",
+        "--hidden-import=pydantic_core",
+        # pandas/numpy internals
+        "--hidden-import=pandas._libs.tslibs.np_datetime",
+        "--hidden-import=pandas._libs.tslibs.nattype",
+        "--hidden-import=pandas._libs.tslibs.timedeltas",
+        "--hidden-import=pandas._libs.tslibs.offsets",
+        # openpyxl
+        "--hidden-import=openpyxl",
+        "--hidden-import=openpyxl.styles",
+        "--hidden-import=openpyxl.styles.fills",
+        # starlette
+        "--hidden-import=starlette",
+        "--hidden-import=starlette.routing",
+        "--hidden-import=starlette.middleware",
+        "--hidden-import=starlette.staticfiles",
+        # collect-all for packages with dynamic imports
+        "--collect-all=uvicorn",
+        "--collect-all=fastapi",
+        "--collect-all=starlette",
+        "--collect-all=pydantic",
+        "--collect-all=openpyxl",
+        "--noconfirm",
+        "--clean",
+        "app.py",
     ]
-    
-    try:
-        subprocess.run(cmd, check=True)
-        print("✓ Executable created successfully!")
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"✗ Error creating executable: {e}")
-        return False
-    except FileNotFoundError:
-        print("✗ PyInstaller not found. Please install it with: pip install pyinstaller")
-        return False
+
+    run(cmd, cwd=BACKEND_DIR)
+    ok(f"Executable built -> {DIST_DIR / (APP_NAME + '.exe')}")
 
 
-def create_installer_package():
-    """Create installer package structure"""
-    print("Creating installer package...")
-    
-    # Create package directory
-    package_dir = 'CTR_Mapper_Desktop_Package'
-    if os.path.exists(package_dir):
-        shutil.rmtree(package_dir)
-    
-    os.makedirs(package_dir)
-    
-    # Copy executable directory
-    if os.path.exists('dist/CTR_Mapper'):
-        shutil.copytree('dist/CTR_Mapper', os.path.join(package_dir, 'CTR_Mapper'))
-    else:
-        print("✗ Executable directory not found in dist/")
-        return False
-    
-    # Create README
-    readme_content = """
-CTR Mapper Desktop Application
-==============================
+# ---------------------------------------------------------------------------
+# Step 3: Package into zip
+# ---------------------------------------------------------------------------
 
-Installation:
-1. Extract this folder to your desired location
-2. Navigate to the CTR_Mapper folder
-3. Run CTR_Mapper.exe
+def package_zip():
+    step("Step 3 — Create distributable zip")
 
-Usage:
-- The application will open in your default web browser
-- Upload your Excel files through the web interface
-- Download the processed poliza ledger files
+    if not DIST_DIR.exists():
+        raise RuntimeError(f"dist/{APP_NAME}/ not found — run Step 2 first")
 
-Features:
-- Self-contained: No need to install Python or dependencies
-- Local processing: Your files stay on your computer
-- Same interface as the web version
-- Automatic cleanup of temporary files
+    zip_path = WEBAPP_DIR / f"{PACKAGE_NAME}.zip"
+    if zip_path.exists():
+        zip_path.unlink()
 
-Requirements:
-- Windows 10 or later
-- Microsoft Visual C++ Redistributable (usually already installed)
-- No additional software installation required
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for file in DIST_DIR.rglob("*"):
+            if file.is_file():
+                arcname = Path(PACKAGE_NAME) / file.relative_to(DIST_DIR)
+                zf.write(file, arcname)
+        # Add README
+        zf.writestr(
+            f"{PACKAGE_NAME}/README.txt",
+            README_TEXT,
+        )
 
-Troubleshooting:
-- If the application doesn't start, try running as administrator
-- Make sure Windows Defender or antivirus isn't blocking the executable
-- If you get a "missing DLL" error, install Microsoft Visual C++ Redistributable
-- For file upload errors, check that the Excel file is not password-protected
+    size_mb = zip_path.stat().st_size / (1024 * 1024)
+    ok(f"Zip created -> {zip_path} ({size_mb:.1f} MB)")
 
-Support:
-- For technical support, contact your system administrator
+
+README_TEXT = """\
+CTR FX Remeasurement — Desktop Application
+===========================================
+
+Installation
+------------
+1. Extract this zip to any folder on your computer.
+2. Open the CTR_FX_Remeasurement folder.
+3. Double-click CTR_FX_Remeasurement.exe to launch.
+
+The application will open in your default web browser automatically.
+
+Data Storage
+------------
+Your configuration (account mapping, exchange rates, history) is saved to:
+  %LOCALAPPDATA%\\CTR-FX-Remeasurement\\ctr_fx.db
+
+This file persists across application updates — your data is never lost
+when you install a new version of the .exe.
+
+Processed output files are saved temporarily to:
+  %LOCALAPPDATA%\\CTR-FX-Remeasurement\\uploads\\
+
+Usage
+-----
+1. Go to Account Mapping and upload your account mapping file.
+2. Go to Exchange Rates and upload your period-end rates file.
+3. Go to Process CTR, upload your CTR file, and click Process CTR.
+4. Download the output Excel file from the Results screen.
+
+Troubleshooting
+---------------
+- If Windows Defender blocks the exe, click "More info" then "Run anyway".
+- If the browser does not open, navigate to http://localhost:5001 manually.
+- If you get a missing DLL error, install:
+    Microsoft Visual C++ Redistributable (x64)
+    https://aka.ms/vs/17/release/vc_redist.x64.exe
+
+Requirements
+------------
+- Windows 10 or later (64-bit)
+- No Python or other software required
 """
-    
-    with open(os.path.join(package_dir, 'README.txt'), 'w') as f:
-        f.write(readme_content)
-    
-    print(f"✓ Package created in {package_dir}/")
-    return True
 
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 def main():
-    """Main build process"""
-    print("=" * 60)
-    print("CTR Mapper Desktop Build Script (Combined Version)")
-    print("=" * 60)
-    
-    # Check if we're in the right directory
-    if not os.path.exists('backend/app.py'):
-        print("✗ backend/app.py not found. Please run this script from the webapp/ directory")
+    print(f"\n{'='*60}")
+    print(f"  CTR FX Remeasurement — Desktop Build v{APP_VERSION}")
+    print(f"{'='*60}")
+    print(f"  webapp dir : {WEBAPP_DIR}")
+    print(f"  backend dir: {BACKEND_DIR}")
+
+    if not (WEBAPP_DIR / "backend" / "app.py").exists():
+        fail("app.py not found. Run this script from the webapp/ directory.")
         return 1
-    
-    # Change to backend directory for PyInstaller
-    os.chdir('backend')
-    
-    # Check if frontend is built
-    if not ensure_frontend_built():
-        return 1
-    
-    # Check if required dependencies are installed
+
     try:
-        import PyInstaller
-    except ImportError:
-        print("✗ PyInstaller not installed. Installing...")
-        try:
-            subprocess.run([sys.executable, '-m', 'pip', 'install', 'pyinstaller'], check=True)
-        except subprocess.CalledProcessError:
-            print("✗ Failed to install PyInstaller")
-            return 1
-    
-    # Build process
-    try:
-        clean_build()
-        
-        if not create_executable():
-            return 1
-        
-        if not create_installer_package():
-            return 1
-        
-        print("\n" + "=" * 60)
-        print("✓ Build completed successfully!")
-        print("✓ Executable: dist/CTR_Mapper/")
-        print("✓ Package: CTR_Mapper_Desktop_Package/")
-        print("\nTo test:")
-        print("  python app.py --desktop")
-        print("\nTo distribute:")
-        print("  Zip the CTR_Mapper_Desktop_Package folder")
-        print("  Recipients need to extract and run CTR_Mapper/CTR_Mapper.exe")
-        print("=" * 60)
-        
+        build_frontend()
+        build_exe()
+        package_zip()
+
+        print(f"\n{'='*60}")
+        print(f"  Build complete!")
+        print(f"  Exe : {DIST_DIR / (APP_NAME + '.exe')}")
+        print(f"  Zip : {WEBAPP_DIR / (PACKAGE_NAME + '.zip')}")
+        print(f"{'='*60}\n")
         return 0
-        
+
     except KeyboardInterrupt:
-        print("\n✗ Build interrupted by user")
+        fail("Build interrupted by user.")
         return 1
-    except Exception as e:
-        print(f"✗ Build failed: {e}")
+    except Exception as exc:
+        fail(str(exc))
         return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

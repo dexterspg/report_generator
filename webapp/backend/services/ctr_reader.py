@@ -254,6 +254,7 @@ def parse_ctr(
 
     # --- Normalise Contract Currency to uppercase (EC-006) ---
     df["Contract Currency"] = df["Contract Currency"].astype(str).str.strip().str.upper()
+    df["Contract Currency"] = df["Contract Currency"].str.split(" - ").str[0].str.strip()
 
     # --- Normalise Account Name: fill blanks with "—" (FR-011) ---
     df["Account Name"] = df["Account Name"].astype(str).str.strip()
@@ -265,6 +266,38 @@ def parse_ctr(
         ["Amount in Contract Currency", "Amount in Company Currency"],
         warnings,
     )
+
+    # --- Extract fiscal metadata from data columns (rows 1-26 do not contain these) ---
+    if metadata.get("fiscal_year") is None and "Fiscal Year" in df.columns:
+        vals = df["Fiscal Year"].dropna().unique()
+        if len(vals) == 1:
+            raw = str(vals[0])
+            metadata["fiscal_year"] = str(int(float(raw))) if raw.replace('.', '', 1).isdigit() else raw
+        elif len(vals) > 1:
+            warnings.append(
+                f"Multiple Fiscal Years found in CTR: {sorted(str(v) for v in vals)}. Using first."
+            )
+            raw = str(vals[0])
+            metadata["fiscal_year"] = str(int(float(raw))) if raw.replace('.', '', 1).isdigit() else raw
+
+    if metadata.get("fiscal_period") is None and "Fiscal Period" in df.columns:
+        vals = df["Fiscal Period"].dropna().unique()
+        if len(vals) == 1:
+            raw = str(vals[0])
+            metadata["fiscal_period"] = str(int(float(raw))) if raw.replace('.', '', 1).isdigit() else raw
+        elif len(vals) > 1:
+            warnings.append(
+                f"Multiple Fiscal Periods found in CTR: {sorted(str(v) for v in vals)}. Using first."
+            )
+            raw = str(vals[0])
+            metadata["fiscal_period"] = str(int(float(raw))) if raw.replace('.', '', 1).isdigit() else raw
+
+    if metadata.get("company_currency") is None and "Company Currency" in df.columns:
+        vals = df["Company Currency"].dropna().unique()
+        if len(vals) >= 1:
+            raw = str(vals[0]).strip()
+            # Normalize: "CAD - Canadian Dollar" → "CAD"
+            metadata["company_currency"] = raw.split(" - ")[0].strip().upper()
 
     # --- Detect conflicting Account Names for same Account Number (EC-004) ---
     name_check = (

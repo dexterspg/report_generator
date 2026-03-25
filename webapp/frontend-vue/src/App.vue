@@ -1,144 +1,130 @@
 <template>
-  <div class="container">
-    <AppHeader />
-
-    <main>
-      <!-- Upload Section (placeholder — FX Remeasurement UI to be implemented) -->
-      <div v-if="currentView === 'upload'" class="card">
-        <p>Upload section coming soon.</p>
+  <div class="app-wrapper">
+    <div class="topbar">
+      <h1>CTR FX Remeasurement</h1>
+      <span class="status">Desktop Mode</span>
+    </div>
+    <div class="shell">
+      <nav class="sidebar">
+        <div class="section-label">Process</div>
+        <a :class="{ active: currentView === 'process' }" @click="navigate('process')">Process CTR</a>
+        <div class="section-label">Config</div>
+        <a :class="{ active: currentView === 'mapping' }" @click="navigate('mapping')">
+          Account Mapping
+          <span class="badge" v-if="mappingCount > 0">{{ mappingCount }}</span>
+        </a>
+        <a :class="{ active: currentView === 'rates' }" @click="navigate('rates')">
+          Exchange Rates
+          <span class="badge" v-if="ratesCount > 0">{{ ratesCount }}</span>
+        </a>
+        <div class="section-label">Audit</div>
+        <a :class="{ active: currentView === 'history' }" @click="navigate('history')">History</a>
+      </nav>
+      <div style="overflow: hidden;">
+        <ProcessCTR
+          v-if="currentView === 'process'"
+          :mapping-count="mappingCount"
+          :rates-count="ratesCount"
+          @start-processing="onStartProcessing"
+          @error="onError"
+        />
+        <ProcessingView
+          v-else-if="currentView === 'processing'"
+          :job-id="currentJobId"
+          :filename="processingFilename"
+          @show-results="onShowResults"
+          @error="onError"
+        />
+        <ResultsView
+          v-else-if="currentView === 'results'"
+          :job-id="currentJobId"
+          :result="currentResult"
+          @new-upload="navigate('process')"
+        />
+        <AccountMapping
+          v-else-if="currentView === 'mapping'"
+          @count-changed="onMappingCountChanged"
+        />
+        <ExchangeRates
+          v-else-if="currentView === 'rates'"
+          @count-changed="onRatesCountChanged"
+        />
+        <HistoryView
+          v-else-if="currentView === 'history'"
+        />
+        <ErrorView
+          v-else-if="currentView === 'error'"
+          :message="errorMessage"
+          @retry="navigate('process')"
+        />
       </div>
-
-      <!-- Progress Section -->
-      <ProgressSection
-        v-if="currentView === 'progress'"
-        :progress="progress"
-        :progress-text="progressText"
-      />
-
-      <!-- Results Section (placeholder — FX Remeasurement UI to be implemented) -->
-      <div v-if="currentView === 'results'" class="card">
-        <p>Results section coming soon.</p>
-      </div>
-
-      <!-- Error Section -->
-      <ErrorSection
-        v-if="currentView === 'error'"
-        :error-message="errorMessage"
-        @retry="resetApp"
-      />
-    </main>
-
-    <AppFooter />
+    </div>
   </div>
 </template>
 
 <script>
-import { ref, onUnmounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import axios from 'axios'
-import AppHeader from './components/AppHeader.vue'
-import AppFooter from './components/AppFooter.vue'
-import ProgressSection from './components/ProgressSection.vue'
-import ErrorSection from './components/ErrorSection.vue'
+import ProcessCTR from './components/ProcessCTR.vue'
+import ProcessingView from './components/ProcessingView.vue'
+import ResultsView from './components/ResultsView.vue'
+import AccountMapping from './components/AccountMapping.vue'
+import ExchangeRates from './components/ExchangeRates.vue'
+import HistoryView from './components/HistoryView.vue'
+import ErrorView from './components/ErrorView.vue'
 
 export default {
   name: 'App',
-  components: {
-    AppHeader,
-    AppFooter,
-    ProgressSection,
-    ErrorSection
-  },
+  components: { ProcessCTR, ProcessingView, ResultsView, AccountMapping, ExchangeRates, HistoryView, ErrorView },
   setup() {
-    const currentView = ref('upload')
+    const currentView = ref('process')
     const currentJobId = ref(null)
-    const pollInterval = ref(null)
-    const progress = ref(0)
-    const progressText = ref('')
-    const results = ref(null)
+    const currentResult = ref(null)
+    const processingFilename = ref('')
     const errorMessage = ref('')
+    const mappingCount = ref(0)
+    const ratesCount = ref(0)
 
-    const startStatusPolling = () => {
-      if (pollInterval.value) {
-        clearInterval(pollInterval.value)
-      }
-
-      pollInterval.value = setInterval(async () => {
-        try {
-          const response = await axios.get(`/status/${currentJobId.value}`)
-          const status = response.data
-
-          switch (status.status) {
-            case 'pending':
-              updateProgress(30, 'Waiting...')
-              break
-            case 'processing':
-              updateProgress(60, 'Processing...')
-              break
-            case 'completed':
-              clearInterval(pollInterval.value)
-              updateProgress(100, 'Complete')
-              setTimeout(() => showResults(status), 500)
-              break
-            case 'failed':
-              clearInterval(pollInterval.value)
-              throw new Error(status.error || 'Processing failed')
-            default:
-              updateProgress(40, 'Processing...')
-          }
-        } catch (error) {
-          clearInterval(pollInterval.value)
-          showError(error.response?.data?.detail || error.message)
-        }
-      }, 1000)
+    const fetchCounts = async () => {
+      try {
+        const [mRes, rRes] = await Promise.all([
+          axios.get('/config/account-mapping'),
+          axios.get('/config/exchange-rates'),
+        ])
+        mappingCount.value = mRes.data.count ?? 0
+        ratesCount.value = rRes.data.count ?? 0
+      } catch {}
     }
 
-    const updateProgress = (percentage, text) => {
-      progress.value = percentage
-      progressText.value = text
+    onMounted(fetchCounts)
+
+    const navigate = (view) => {
+      currentView.value = view
     }
 
-    const showResults = (status) => {
-      results.value = status.result
+    const onStartProcessing = ({ jobId, filename }) => {
+      currentJobId.value = jobId
+      processingFilename.value = filename
+      currentView.value = 'processing'
+    }
+
+    const onShowResults = (result) => {
+      currentResult.value = result
       currentView.value = 'results'
     }
 
-    const showError = (message) => {
+    const onError = (message) => {
       errorMessage.value = message
       currentView.value = 'error'
-      if (pollInterval.value) {
-        clearInterval(pollInterval.value)
-      }
     }
 
-    const resetApp = () => {
-      currentJobId.value = null
-      results.value = null
-      errorMessage.value = ''
-      progress.value = 0
-      progressText.value = ''
-      currentView.value = 'upload'
-      if (pollInterval.value) {
-        clearInterval(pollInterval.value)
-      }
-    }
-
-    onUnmounted(() => {
-      if (pollInterval.value) {
-        clearInterval(pollInterval.value)
-      }
-    })
+    const onMappingCountChanged = (count) => { mappingCount.value = count }
+    const onRatesCountChanged = (count) => { ratesCount.value = count }
 
     return {
-      currentView,
-      currentJobId,
-      progress,
-      progressText,
-      results,
-      errorMessage,
-      startStatusPolling,
-      showResults,
-      showError,
-      resetApp
+      currentView, currentJobId, currentResult, processingFilename, errorMessage,
+      mappingCount, ratesCount, navigate, onStartProcessing, onShowResults, onError,
+      onMappingCountChanged, onRatesCountChanged,
     }
   }
 }

@@ -10,6 +10,8 @@ export default defineConfig({
       '/upload': 'http://localhost:8000',
       '/status': 'http://localhost:8000',
       '/download': 'http://localhost:8000',
+      '/config': 'http://localhost:8000',
+      '/history': 'http://localhost:8000',
       '/health': 'http://localhost:8000',
       '/cleanup': 'http://localhost:8000',
       '/docs': 'http://localhost:8000'

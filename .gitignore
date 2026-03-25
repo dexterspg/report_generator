@@ -317,3 +317,10 @@ validation_data/
 *.backup
 *.old
 *.orig
+
+# SQLite runtime databases
+*.db
+
+# Build artifacts/zips
+*.zip
+.claude/worktrees/

@@ -10,7 +10,7 @@ Can run as:
 - Desktop app: python app.py --desktop
 """
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form, BackgroundTasks
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,12 +28,16 @@ import uvicorn
 
 from models.schemas import JobStatus
 from services.config_store import (
+    _get_app_data_dir,
     load_account_mapping, save_account_mapping, reset_account_mapping,
     parse_account_mapping_file, merge_account_mapping, export_account_mapping,
     load_exchange_rates, save_exchange_rates, reset_exchange_rates,
     parse_exchange_rates_file, merge_exchange_rates, export_exchange_rates,
+    get_exchange_rate,
     save_history_entry, list_history, get_history_entry, rollback_to_entry,
 )
+from services.ctr_reader import parse_ctr
+from services.fx_processor import process_fx, build_output_filename
 
 # Global mode flag
 DESKTOP_MODE = False
@@ -52,28 +56,8 @@ app.add_middleware(
 # Job storage
 jobs: Dict[str, JobStatus] = {}
 
-
-def get_upload_dir():
-    """Get the upload directory path, handling PyInstaller executable.
-
-    Desktop mode: %LOCALAPPDATA%/CTR-FX-Remeasurement/uploads/
-    Dev mode: backend/uploads/
-    """
-    if getattr(sys, 'frozen', False):
-        local_app_data = os.environ.get("LOCALAPPDATA")
-        if local_app_data:
-            base_path = Path(local_app_data) / "CTR-FX-Remeasurement"
-        else:
-            base_path = Path.home() / ".local" / "share" / "CTR-FX-Remeasurement"
-        base_path.mkdir(parents=True, exist_ok=True)
-    else:
-        base_path = Path(__file__).parent
-
-    upload_dir = base_path / "uploads"
-    upload_dir.mkdir(exist_ok=True)
-    return upload_dir
-
-UPLOAD_DIR = get_upload_dir()
+UPLOAD_DIR = _get_app_data_dir() / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def cleanup_old_files():
@@ -89,6 +73,162 @@ def cleanup_old_files():
                         print(f"Could not delete {file_path}: {e}")
     except Exception as e:
         print(f"Cleanup error: {e}")
+
+
+def _period_to_date(metadata: dict) -> str:
+    """Convert fiscal_year + fiscal_period from CTR metadata to an ISO date string.
+
+    Used for exchange rate lookup (most recent rate on or before this date).
+    Defaults to today if metadata values are missing.
+    """
+    try:
+        fy = int(metadata.get("fiscal_year") or datetime.now().year)
+        fp = int(metadata.get("fiscal_period") or 12)
+        # Use last day of the fiscal period (month) as the as-of date
+        import calendar
+        month = max(1, min(fp, 12))
+        last_day = calendar.monthrange(fy, month)[1]
+        return f"{fy:04d}-{month:02d}-{last_day:02d}"
+    except Exception:
+        return datetime.now().strftime("%Y-%m-%d")
+
+
+def _run_fx_processing(job_id: str, temp_path: Path, ctr_result: dict) -> None:
+    """Background task: run the FX pipeline and update job status."""
+    start = time.time()
+    try:
+        jobs[job_id].status = "processing"
+
+        df = ctr_result["df"]
+        metadata = ctr_result["metadata"]
+        fiscal_year = metadata.get("fiscal_year")
+        fiscal_period = metadata.get("fiscal_period")
+        company_currency = (metadata.get("company_currency") or "").upper()
+        as_of_date = _period_to_date(metadata)
+
+        # Build account_mapping dict keyed by account_number
+        mapping_rows = load_account_mapping()
+        account_mapping = {row["account_number"]: row for row in mapping_rows}
+
+        # Build exchange_rates dict {from_ccy: rate} for each unique contract currency
+        unique_ccys = df["Contract Currency"].dropna().unique().tolist()
+        exchange_rates: Dict[str, float] = {}
+        for ccy in unique_ccys:
+            rate = get_exchange_rate(ccy.upper(), company_currency, as_of_date)
+            if rate is not None:
+                exchange_rates[ccy.upper()] = rate
+
+        # Determine output path
+        output_filename = build_output_filename(fiscal_year, fiscal_period)
+        output_path = UPLOAD_DIR / output_filename
+
+        result = process_fx(
+            df=df,
+            account_mapping=account_mapping,
+            exchange_rates=exchange_rates,
+            output_file_path=str(output_path),
+            fiscal_year=fiscal_year,
+            fiscal_period=fiscal_period,
+        )
+
+        result["processing_time"] = round(time.time() - start, 2)
+        result["source_filename"] = metadata.get("source_filename", "")
+
+        jobs[job_id].status = "completed" if result["success"] else "failed"
+        jobs[job_id].result = result
+        jobs[job_id].error = result.get("error")
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+        jobs[job_id].status = "failed"
+        jobs[job_id].error = str(exc)
+        jobs[job_id].result = {"success": False, "error": str(exc)}
+    finally:
+        jobs[job_id].completed_at = datetime.now()
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
+
+
+# ---------------------------------------------------------------------------
+# Core processing endpoints
+# ---------------------------------------------------------------------------
+
+_MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+
+
+@app.post("/upload")
+async def upload_ctr(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    input_header_start: int = Form(27),
+):
+    """Upload a CTR file, validate it, and start async FX processing."""
+    if not file.filename.lower().endswith(('.xlsx', '.xls', '.csv')):
+        raise HTTPException(status_code=400, detail="Only .xlsx, .xls, and .csv files are accepted.")
+
+    content = await file.read()
+    if len(content) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=400, detail="File exceeds 50 MB limit.")
+
+    temp_path = UPLOAD_DIR / f"{uuid.uuid4()}_{file.filename}"
+    temp_path.write_bytes(content)
+
+    try:
+        ctr_result = parse_ctr(str(temp_path), input_header_start=input_header_start)
+    except Exception as exc:
+        temp_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=f"Could not read CTR file: {exc}")
+
+    if not ctr_result.get("success", True) or ctr_result.get("df") is None or len(ctr_result["df"]) == 0:
+        temp_path.unlink(missing_ok=True)
+        msgs = ctr_result.get("warnings") or ["No data rows found."]
+        raise HTTPException(status_code=400, detail="; ".join(msgs))
+
+    # Require configs to be loaded
+    if not load_account_mapping():
+        temp_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail="Account mapping is not configured. Upload it in the Account Mapping screen.")
+    if not load_exchange_rates():
+        temp_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail="Exchange rates are not configured. Upload them in the Exchange Rates screen.")
+
+    job_id = str(uuid.uuid4())
+    jobs[job_id] = JobStatus(
+        job_id=job_id,
+        status="pending",
+        created_at=datetime.now(),
+    )
+    # Store filename in metadata for the background task
+    ctr_result["metadata"]["source_filename"] = file.filename
+
+    background_tasks.add_task(_run_fx_processing, job_id, temp_path, ctr_result)
+
+    return {"job_id": job_id, "status": "pending"}
+
+
+@app.get("/download/{job_id}")
+async def download_result(job_id: str):
+    """Download the processed output Excel file for a completed job."""
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Job not found.")
+
+    job = jobs[job_id]
+    if job.status != "completed":
+        raise HTTPException(status_code=400, detail=f"Job is not complete (status: {job.status}).")
+
+    result = job.result or {}
+    output_file = result.get("output_file")
+    if not output_file or not Path(output_file).exists():
+        raise HTTPException(status_code=404, detail="Output file not found — it may have been cleaned up.")
+
+    return FileResponse(
+        path=output_file,
+        filename=Path(output_file).name,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 # ---------------------------------------------------------------------------
