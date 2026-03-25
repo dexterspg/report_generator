@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CTR FX Remeasurement - Sketch Wireframe</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #f5f5f5; color: #333; padding: 20px; }
+    .page { background: #fff; max-width: 1200px; margin: 0 auto 40px; border: 1px solid #ccc; }
+    .page-title { font-size: 12px; color: #666; padding: 8px 20px; background: #f0f0f0; border-bottom: 1px solid #ccc; }
+
+    .header { padding: 20px; border-bottom: 1px solid #ddd; }
+    .header h1 { font-size: 16px; margin-bottom: 4px; }
+    .header p { font-size: 11px; color: #666; }
+
+    .layout { display: grid; grid-template-columns: 150px 1fr; min-height: 500px; }
+    .sidebar { padding: 12px; border-right: 1px solid #ddd; background: #fafafa; }
+    .sidebar-section { margin-bottom: 16px; }
+    .sidebar-label { font-size: 9px; font-weight: bold; color: #999; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px; }
+    .sidebar-item { padding: 6px 8px; font-size: 11px; border-left: 3px solid transparent; margin-bottom: 3px; }
+    .sidebar-item.active { background: #e8f4fc; border-left-color: #0099cc; font-weight: bold; }
+
+    .content { padding: 20px; }
+    .content h2 { font-size: 13px; margin-bottom: 4px; }
+    .content p { font-size: 11px; color: #666; margin-bottom: 12px; }
+
+    .upload-box { border: 2px dashed #ccc; padding: 30px 20px; text-align: center; margin-bottom: 12px; background: #fafafa; }
+    .upload-box h3 { font-size: 11px; margin-bottom: 4px; }
+    .upload-box p { font-size: 10px; color: #888; }
+
+    .checklist { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+    .checklist-item { border: 1px solid #ddd; padding: 8px; font-size: 10px; }
+    .checklist-item.ok { background: #f0fdf4; }
+    .checklist-item.warn { background: #fffbeb; }
+
+    .button-row { display: flex; gap: 8px; margin: 12px 0; }
+    .btn-sketch { padding: 6px 10px; font-size: 10px; border: 1px solid #999; background: #fff; }
+    .btn-primary { background: #ccc; }
+
+    .split-config { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .config-panel { border: 1px solid #ddd; padding: 12px; background: #f9f9f9; }
+    .config-panel h3 { font-size: 10px; font-weight: bold; margin-bottom: 8px; }
+
+    .mode-toggle { display: flex; gap: 4px; margin: 8px 0; }
+    .mode-btn { flex: 1; padding: 4px; font-size: 9px; border: 1px solid #ccc; background: #fff; }
+    .mode-btn.active { background: #ddd; }
+
+    .table-sketch { width: 100%; border-collapse: collapse; font-size: 10px; margin: 12px 0; }
+    .table-sketch th { background: #f0f0f0; border: 1px solid #ddd; padding: 6px; text-align: left; }
+    .table-sketch td { border: 1px solid #ddd; padding: 6px; }
+
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 16px 0; }
+    .stat-card { border: 1px solid #ddd; padding: 12px; text-align: center; background: #f9f9f9; }
+    .stat-val { font-size: 16px; font-weight: bold; }
+    .stat-label { font-size: 9px; color: #666; margin-top: 4px; }
+
+    .results-box { text-align: center; padding: 40px 20px; }
+    .results-icon { font-size: 36px; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+
+<!-- PAGE 1: UPLOAD CTR -->
+<div class="page">
+  <div class="page-title">Phase 1 — Upload CTR & Process</div>
+  <div class="header">
+    <h1>CTR FX Remeasurement</h1>
+    <p>Consolidated Transaction Report — FX Gain/Loss Calculator</p>
+  </div>
+
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Process</div>
+        <div class="sidebar-item active">Process CTR</div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Config</div>
+        <div class="sidebar-item">Account Mapping</div>
+        <div class="sidebar-item">Exchange Rates</div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Audit</div>
+        <div class="sidebar-item">History</div>
+      </div>
+    </div>
+
+    <div class="content">
+      <h2>Process CTR</h2>
+      <p>Upload a CTR file to extract closing balances and calculate FX remeasurement.</p>
+
+      <div class="upload-box">
+        <h3>Drop your CTR file here</h3>
+        <p>or browse files · .xlsx .xls .csv</p>
+      </div>
+
+      <strong style="font-size: 11px;">Readiness Check</strong>
+      <div class="checklist">
+        <div class="checklist-item warn">
+          <strong style="font-size: 10px;">Account Mapping</strong><br>
+          <span style="font-size: 9px; color: #888;">Not set</span>
+        </div>
+        <div class="checklist-item warn">
+          <strong style="font-size: 10px;">Exchange Rates</strong><br>
+          <span style="font-size: 9px; color: #888;">Not set</span>
+        </div>
+      </div>
+
+      <div class="button-row">
+        <button class="btn-sketch">Clear</button>
+        <button class="btn-sketch btn-primary">Process CTR</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 2: ACCOUNT MAPPING CONFIG -->
+<div class="page">
+  <div class="page-title">Phase 1 — Account Mapping Configuration</div>
+  <div class="header">
+    <h1>CTR FX Remeasurement</h1>
+    <p>Consolidated Transaction Report — FX Gain/Loss Calculator</p>
+  </div>
+
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Process</div>
+        <div class="sidebar-item">Process CTR</div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Config</div>
+        <div class="sidebar-item active">Account Mapping</div>
+        <div class="sidebar-item">Exchange Rates</div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Audit</div>
+        <div class="sidebar-item">History</div>
+      </div>
+    </div>
+
+    <div class="content">
+      <h2>Account Mapping</h2>
+      <p>Maps GL accounts to type, monetary classification, and rate method.</p>
+
+      <div class="config-panel">
+        <h3>Upload Mapping</h3>
+        <div class="upload-box" style="padding: 20px;">
+          <h3 style="font-size: 11px;">Drop file here</h3>
+          <p>Cols: Account Number, Account Type, Monetary?, Rate</p>
+        </div>
+
+        <strong style="font-size: 10px; display: block; margin-bottom: 6px;">Mode</strong>
+        <div class="mode-toggle">
+          <button class="mode-btn active">Replace</button>
+          <button class="mode-btn">Merge</button>
+        </div>
+
+        <div class="button-row">
+          <button class="btn-sketch" style="color: #c1292e;">Clear All</button>
+          <button class="btn-sketch">Download .xlsx</button>
+          <button class="btn-sketch btn-primary">Upload</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 3: EXCHANGE RATES CONFIG -->
+<div class="page">
+  <div class="page-title">Phase 1 — Exchange Rates Configuration</div>
+  <div class="header">
+    <h1>CTR FX Remeasurement</h1>
+    <p>Consolidated Transaction Report — FX Gain/Loss Calculator</p>
+  </div>
+
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Process</div>
+        <div class="sidebar-item">Process CTR</div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Config</div>
+        <div class="sidebar-item">Account Mapping</div>
+        <div class="sidebar-item active">Exchange Rates</div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Audit</div>
+        <div class="sidebar-item">History</div>
+      </div>
+    </div>
+
+    <div class="content">
+      <h2>Exchange Rates</h2>
+      <p>Period-end spot rates for FX remeasurement. FromCurrency = contract currency, ToCurrency = company currency.</p>
+
+      <div class="config-panel">
+        <h3>Upload Rates</h3>
+        <div class="upload-box" style="padding: 20px;">
+          <h3 style="font-size: 11px;">Drop file here</h3>
+          <p>Cols: RateType, FromCurrency, ToCurrency, ValidFrom, ExchangeRate</p>
+        </div>
+
+        <strong style="font-size: 10px; display: block; margin-bottom: 6px;">Mode</strong>
+        <div class="mode-toggle">
+          <button class="mode-btn active">Replace</button>
+          <button class="mode-btn">Merge</button>
+        </div>
+
+        <div class="button-row">
+          <button class="btn-sketch" style="color: #c1292e;">Clear All</button>
+          <button class="btn-sketch">Download .xlsx</button>
+          <button class="btn-sketch btn-primary">Upload</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 4: RESULTS VIEW -->
+<div class="page">
+  <div class="page-title">Phase 1 — Results View (after processing)</div>
+  <div class="header">
+    <h1>CTR FX Remeasurement</h1>
+    <p>Consolidated Transaction Report — FX Gain/Loss Calculator</p>
+  </div>
+
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Process</div>
+        <div class="sidebar-item active">Process CTR</div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Config</div>
+        <div class="sidebar-item">Account Mapping</div>
+        <div class="sidebar-item">Exchange Rates</div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Audit</div>
+        <div class="sidebar-item">History</div>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="results-box">
+        <div class="results-icon">✓</div>
+        <h2>Processing Complete</h2>
+        <p style="margin-bottom: 20px;">file.xlsx — FY 2025 · Period 12 · 2.3s</p>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-val">1,234</div>
+            <div class="stat-label">INPUT ROWS</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val">567</div>
+            <div class="stat-label">OUTPUT ROWS</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val">3</div>
+            <div class="stat-label">CURRENCIES</div>
+          </div>
+        </div>
+
+        <button class="btn-sketch btn-primary" style="margin-top: 20px;">Download Output</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 5: HISTORY VIEW -->
+<div class="page">
+  <div class="page-title">Phase 1 — History (read-only)</div>
+  <div class="header">
+    <h1>CTR FX Remeasurement</h1>
+    <p>Consolidated Transaction Report — FX Gain/Loss Calculator</p>
+  </div>
+
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Process</div>
+        <div class="sidebar-item">Process CTR</div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Config</div>
+        <div class="sidebar-item">Account Mapping</div>
+        <div class="sidebar-item">Exchange Rates</div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Audit</div>
+        <div class="sidebar-item active">History</div>
+      </div>
+    </div>
+
+    <div class="content">
+      <h2>Config History</h2>
+      <p>Audit trail of configuration changes. To recover from a bad upload, download the current config, edit in Excel, and re-upload with Replace mode.</p>
+
+      <div class="button-row" style="margin-bottom: 12px;">
+        <button class="btn-sketch" style="color: #c1292e;">Clear History</button>
+      </div>
+
+      <div style="max-height: 400px; overflow-y: auto;">
+        <table class="table-sketch">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Action</th>
+              <th>Config</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colspan="4" style="text-align: center; color: #aaa; padding: 16px;">No history yet</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

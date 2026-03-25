@@ -3,44 +3,9 @@
     <h2>Account Mapping</h2>
     <p class="desc">Maps GL accounts to type, monetary classification, and rate method.</p>
 
-    <div class="split">
-      <!-- Left: current mapping -->
-      <div class="card">
-        <div class="card-head">
-          Current Mapping
-          <span style="font-weight:400;color:#888">{{ rows.length }}</span>
-        </div>
-        <div class="card-body" style="padding:0;max-height:320px;overflow-y:auto">
-          <div v-if="rows.length === 0" style="padding:16px;text-align:center;color:#aaa;font-size:12px">No mapping configured</div>
-          <table v-else>
-            <thead>
-              <tr>
-                <th>Account Number</th>
-                <th>Account Type</th>
-                <th>Monetary?</th>
-                <th>Rate</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in rows" :key="row.account_number">
-                <td class="mono">{{ row.account_number }}</td>
-                <td>{{ row.account_type }}</td>
-                <td>{{ row.monetary }}</td>
-                <td>{{ row.rate }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="card-foot">
-          <button class="btn-ghost btn-sm" style="color:#c1292e" @click="clearAll" :disabled="rows.length === 0">Clear All</button>
-          <button class="btn btn-sm" @click="downloadMapping" :disabled="rows.length === 0">Download .xlsx</button>
-        </div>
-      </div>
-
-      <!-- Right: upload -->
-      <div class="card">
-        <div class="card-head">Upload Mapping</div>
-        <div class="card-body">
+    <div class="card">
+      <div class="card-head">Upload Mapping</div>
+      <div class="card-body">
           <div
             class="upload-box"
             :class="{ 'has-file': uploadFile, 'drag-over': isDragging }"
@@ -69,7 +34,10 @@
           <div v-if="uploadError" style="margin-top:8px;color:#c1292e;font-size:11px">{{ uploadError }}</div>
         </div>
         <div class="card-foot">
-          <span></span>
+          <div style="display:flex;gap:8px">
+            <button class="btn-ghost btn-sm" style="color:#c1292e" @click="clearAll" :disabled="rows.length === 0">Clear All</button>
+            <button class="btn btn-sm" @click="downloadMapping" :disabled="rows.length === 0">Download .xlsx</button>
+          </div>
           <button class="btn btn-blue btn-sm" :disabled="!uploadFile || uploading" @click="doUpload">
             {{ uploading ? 'Uploading...' : 'Upload' }}
           </button>

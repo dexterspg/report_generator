@@ -3,44 +3,9 @@
     <h2>Exchange Rates</h2>
     <p class="desc">Period-end spot rates for FX remeasurement. FromCurrency = contract currency, ToCurrency = company currency.</p>
 
-    <div class="split">
-      <div class="card">
-        <div class="card-head">
-          Current Rates
-          <span style="font-weight:400;color:#888">{{ rows.length }}</span>
-        </div>
-        <div class="card-body" style="padding:0;max-height:320px;overflow-y:auto">
-          <div v-if="rows.length === 0" style="padding:16px;text-align:center;color:#aaa;font-size:12px">No rates configured</div>
-          <table v-else>
-            <thead>
-              <tr>
-                <th>Rate Type</th>
-                <th>From Currency</th>
-                <th>To Currency</th>
-                <th>Valid From</th>
-                <th class="r">Exchange Rate</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in rows" :key="row.id || (row.from_currency + row.valid_from)">
-                <td>{{ row.rate_type }}</td>
-                <td class="mono">{{ row.from_currency }}</td>
-                <td class="mono">{{ row.to_currency }}</td>
-                <td>{{ row.valid_from }}</td>
-                <td class="r">{{ row.exchange_rate }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="card-foot">
-          <button class="btn-ghost btn-sm" style="color:#c1292e" @click="clearAll" :disabled="rows.length === 0">Clear All</button>
-          <button class="btn btn-sm" @click="downloadRates" :disabled="rows.length === 0">Download .xlsx</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-head">Upload Rates</div>
-        <div class="card-body">
+    <div class="card">
+      <div class="card-head">Upload Rates</div>
+      <div class="card-body">
           <div
             class="upload-box"
             :class="{ 'has-file': uploadFile, 'drag-over': isDragging }"
@@ -67,7 +32,10 @@
           <div v-if="uploadError" style="margin-top:8px;color:#c1292e;font-size:11px">{{ uploadError }}</div>
         </div>
         <div class="card-foot">
-          <span></span>
+          <div style="display:flex;gap:8px">
+            <button class="btn-ghost btn-sm" style="color:#c1292e" @click="clearAll" :disabled="rows.length === 0">Clear All</button>
+            <button class="btn btn-sm" @click="downloadRates" :disabled="rows.length === 0">Download .xlsx</button>
+          </div>
           <button class="btn btn-blue btn-sm" :disabled="!uploadFile || uploading" @click="doUpload">
             {{ uploading ? 'Uploading...' : 'Upload' }}
           </button>

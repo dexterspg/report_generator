@@ -1,5 +1,9 @@
 # Implementation Brief: CTR FX Remeasurement Tool
 
+## UI Design Reference
+
+**Mockup:** `webapp/mockup-v1.html` — 9 screens covering all Phase 1 states (empty, partial config, file uploaded, processing, error, results, account mapping config, exchange rates config, history). Frontend components should match these screens.
+
 ## Sister Project / Pattern
 
 **CTR Mapper (Poliza Ledger)** at `C:/workarea/maturity_analysis_report/webapp/`
@@ -21,7 +25,7 @@ FastAPI + Vue 3 (Options API with Composition `setup()`) + openpyxl. Background 
 1. **FX Remeasurement processing engine** (`fx_processor.py` — replaces `formula_mapper.py` + `ExcelProcessor`)
    - Uses vectorized `COLUMN_MAPPINGS` dict pattern: `{ column_name: callable(df, account_mapping, exchange_rates) -> pd.Series }`
    - Group by `{Account Number, Account Name, Contract Currency}` and aggregate `Amount in Contract Currency` and `Amount in Company Currency`
-   - Apply account mapping (Account Type: BS/P&L, Monetary: Yes/No)
+   - Apply account mapping (Account Type: free text e.g. Asset, Liability, Contra Asset; Monetary: Monetary/Non-Monetary)
    - Apply period-end exchange rates per currency pair
    - Calculate Re-measured Balance: `balance_cc * spot_rate` (monetary) or `initial_measurement` (non-monetary)
    - Calculate FX (Gain) or Loss: `remeasured_balance - initial_measurement`
@@ -30,7 +34,7 @@ FastAPI + Vue 3 (Options API with Composition `setup()`) + openpyxl. Background 
 2. **File-based configuration management** (replaces single-file upload + editable table approach)
    - Both configs (account mapping + exchange rates) managed as uploadable/downloadable CSV/Excel files
    - Account mapping columns: `Account Number`, `Account Type`, `Monetary?`, `Rate` (4 columns)
-   - Exchange rates columns: `ObjectId` (hidden, for duplicate detection), `RateType`, `FromCurrency`, `ToCurrency`, `ValidFrom`, `ExchangeRate` (6 columns, 5 visible in UI)
+   - Exchange rates columns: `RateType`, `FromCurrency`, `ToCurrency`, `ValidFrom`, `ExchangeRate` (5 columns). Duplicate detection uses internal auto-generated ID; merge key is composite `{FromCurrency, ToCurrency, ValidFrom}`
    - Exchange rate lookup: match `FromCurrency` → account's contract currency, `ToCurrency` → company currency
    - Two upload modes: **Replace** (overwrite all) and **Merge** (add new + update existing by key)
    - Download current config as styled Excel for sharing between desktop users
@@ -49,7 +53,7 @@ FastAPI + Vue 3 (Options API with Composition `setup()`) + openpyxl. Background 
    - No i18n (English only per FR-020) — removed `vue-i18n` dependency entirely
    - No `HelpGuide` modal or `LanguageSelector` component
    - Two-step UI: Step 1 (Configuration) with side-by-side account mapping + exchange rates panels, Step 2 (Upload CTR) with drag-and-drop
-   - Simplified results view: summary stats (input rows, output rows, currencies) + download button only. No multi-currency table preview or warnings in the UI
+   - Simplified results view: source filename, fiscal year/period, processing time, summary stats (input rows, output rows, currencies) + download button only. No multi-currency table preview or warnings in the UI
 
 5. **CSV support** (FR-001, FR-024) — `pandas.read_csv()` path alongside Excel
 
@@ -92,7 +96,6 @@ webapp/
                                        - export_account_mapping(), export_exchange_rates() — export as styled Excel for sharing
                                        - save_history_entry() — snapshots both configs at time of action
                                        - list_history(), get_history_entry() — retrieve history (list returns summaries, get returns full with snapshots)
-                                       - rollback_to_entry() — restores configs from snapshot, records rollback in history
   frontend-vue/
     index.html
     vite.config.js
@@ -107,7 +110,13 @@ webapp/
         AppFooter.vue               -- Minimal footer (same as sister)
         ProgressSection.vue         -- Progress bar + spinner (hardcoded English)
         ErrorSection.vue            -- Error display + retry (hardcoded English)
-        (Upload, Config, and Results components — to be implemented)
+        ProcessCTR.vue              -- File upload area with readiness checklist (Account Mapping count, Exchange Rates count)
+        AccountMapping.vue          -- Upload interface with Replace/Merge modes, Download, and Clear All buttons (no preview table)
+        ExchangeRates.vue           -- Upload interface with Replace/Merge modes, Download, and Clear All buttons (no preview table)
+        ResultsView.vue             -- Source filename, fiscal year/period, processing time, summary stats (Input Rows, Output Rows, Currencies) with Download button only
+        HistoryView.vue             -- Read-only history table showing audit trail of configuration changes
+        ProcessingView.vue          -- Progress polling display during file processing
+        ErrorView.vue               -- Error state display with retry option
 ```
 
 ## Backend API Endpoints
@@ -136,7 +145,8 @@ webapp/
 |--------|------|-------------|
 | `GET` | `/history` | List config change history (most recent first). Query param: `limit` (default 50). Returns: timestamp, action, config_type, details |
 | `GET` | `/history/{entry_id}` | Get full history entry including config snapshots |
-| `POST` | `/history/{entry_id}/rollback` | Rollback configs to a previous entry's snapshot. Query param: `config_type` ("account_mapping", "exchange_rates", or "both"). **Note:** Backend API retained for Phase 2 — not exposed in the Phase 1 UI |
+| `DELETE` | `/history` | Clear all history entries |
+| `POST` | `/history/{entry_id}/rollback` | **Phase 2** — not implemented in Phase 1 |
 
 ### Core Processing
 
@@ -159,7 +169,8 @@ webapp/
 - User uploads a CSV or Excel file with columns: `Account Number`, `Account Type`, `Monetary?` (Monetary/Non-Monetary), `Rate` (Historical/Period End)
 - Column names are matched flexibly (e.g., "Acct Num", "Account No.", "account_number" all work)
 - Upload mode is either **Replace** (clear existing, load from file) or **Merge** (add new, update existing by Account Number)
-- Current mapping is always viewable via `GET /config/account-mapping` and downloadable as a styled Excel file via `GET /config/account-mapping/download`
+- Phase 1 UI: Upload area with Replace/Merge toggle, plus Download and Clear All buttons (no preview table of current mapping)
+- API supports viewing current mapping via `GET /config/account-mapping` and downloading styled Excel via `GET /config/account-mapping/download`
 - Reset via `DELETE /config/account-mapping` clears all saved data
 - Every upload and reset is recorded in history with a full config snapshot for rollback
 
@@ -168,12 +179,13 @@ webapp/
 **Why:** Same rationale as account mapping — file-based for desktop sharing. Clients already maintain rate tables in Excel.
 
 **How it works:**
-- User uploads a CSV or Excel file with columns: `ObjectId`, `RateType`, `FromCurrency`, `ToCurrency`, `ValidFrom`, `ExchangeRate`
-- `ObjectId` is used internally for duplicate detection and is hidden in the UI
+- User uploads a CSV or Excel file with columns: `RateType`, `FromCurrency`, `ToCurrency`, `ValidFrom`, `ExchangeRate`
+- The system auto-generates an internal `id` (UUID) on insert; merge key is composite `{FromCurrency, ToCurrency, ValidFrom}`
 - The system finds the correct rate by matching `FromCurrency` to the account's contract currency and `ToCurrency` to the company currency (from CTR metadata)
 - Same Replace/Merge upload modes as account mapping
-- Same download, reset, and history tracking capabilities
-- Currency codes normalized to uppercase; rates parsed as floats
+- Phase 1 UI: Upload area with Replace/Merge toggle, plus Download and Clear All buttons (no preview table of current rates)
+- Same API download, reset, and history tracking capabilities (preview table is Phase 2 feature)
+- Currency codes normalized to uppercase; rates stored as exact text (Python `Decimal` used for all arithmetic — no float conversion)
 
 **Why SQLite (not JSON) for exchange rates:**
 Clients may have multiple rates per currency pair across different time periods (e.g. monthly period-end rates). The processor must find the rate valid on or before the CTR's fiscal period date — a date-range lookup that is error-prone in flat JSON but trivial in SQL. Account mapping has no time dimension, so it stays as JSON.
@@ -210,21 +222,23 @@ All persistent data lives in a single SQLite file: `ctr_fx.db`. Three tables.
 
 | Column | Type | Description |
 |---|---|---|
-| `account_number` | TEXT PRIMARY KEY | Account number from CTR — merge key |
-| `account_type` | TEXT | `BS` or `P&L` |
-| `monetary` | TEXT | `Yes` or `No` |
+| `id` | TEXT PRIMARY KEY | Auto-generated UUID on insert |
+| `account_number` | TEXT UNIQUE | Account number from CTR — merge key |
+| `account_type` | TEXT | Free text from client (e.g. `Asset`, `Liability`, `Contra Asset`) |
+| `monetary` | TEXT | `Monetary` or `Non-Monetary` |
 | `rate` | TEXT | `Historical` or `Period End` |
 
 ```sql
 CREATE TABLE IF NOT EXISTS account_mapping (
-    account_number TEXT PRIMARY KEY,
+    id             TEXT PRIMARY KEY,
+    account_number TEXT NOT NULL UNIQUE,
     account_type   TEXT NOT NULL,
     monetary       TEXT NOT NULL,
     rate           TEXT NOT NULL
 );
 ```
 
-**Merge key:** `account_number` — `INSERT OR REPLACE` on merge.
+**Merge key:** `account_number` (UNIQUE constraint) — on merge, `INSERT OR REPLACE` using the UNIQUE constraint.
 **Replace mode:** `DELETE FROM account_mapping` then bulk insert.
 
 ---
@@ -233,12 +247,12 @@ CREATE TABLE IF NOT EXISTS account_mapping (
 
 | Column | Type | Description |
 |---|---|---|
-| `id` | TEXT PRIMARY KEY | ObjectId from source file — dedup key on merge |
+| `id` | TEXT PRIMARY KEY | Auto-generated UUID on insert |
 | `rate_type` | TEXT | Rate type code (e.g. `M` for month-end) |
 | `from_currency` | TEXT | Contract currency (e.g. `EUR`) — normalized to uppercase |
 | `to_currency` | TEXT | Company currency (e.g. `USD`) — normalized to uppercase |
 | `valid_from` | TEXT | ISO date `YYYY-MM-DD` — the date this rate becomes effective |
-| `exchange_rate` | REAL | The exchange rate value |
+| `exchange_rate` | TEXT | The exchange rate value — stored as text to preserve exact decimal precision (no float rounding) |
 
 ```sql
 CREATE TABLE IF NOT EXISTS exchange_rates (
@@ -247,7 +261,8 @@ CREATE TABLE IF NOT EXISTS exchange_rates (
     from_currency TEXT NOT NULL,
     to_currency   TEXT NOT NULL,
     valid_from    TEXT NOT NULL,
-    exchange_rate REAL NOT NULL
+    exchange_rate TEXT NOT NULL,
+    UNIQUE(from_currency, to_currency, valid_from)
 );
 
 CREATE INDEX IF NOT EXISTS idx_exchange_rates_lookup
@@ -255,7 +270,7 @@ CREATE INDEX IF NOT EXISTS idx_exchange_rates_lookup
 ```
 
 **Rate lookup:** most recent rate on or before the CTR fiscal period date.
-**Merge key:** `id` (ObjectId) — `INSERT OR REPLACE` on merge.
+**Merge key:** composite `{from_currency, to_currency, valid_from}` — on merge, `INSERT OR REPLACE` using the UNIQUE constraint.
 **Replace mode:** `DELETE FROM exchange_rates` then bulk insert.
 
 ---
@@ -266,9 +281,9 @@ CREATE INDEX IF NOT EXISTS idx_exchange_rates_lookup
 |---|---|---|
 | `id` | TEXT PRIMARY KEY | UUID generated at insert time |
 | `timestamp` | TEXT | ISO datetime `YYYY-MM-DDTHH:MM:SS` |
-| `action` | TEXT | `upload`, `reset`, `rollback` |
+| `action` | TEXT | `upload`, `reset` |
 | `config_type` | TEXT | `account_mapping`, `exchange_rates`, `both` |
-| `source_filename` | TEXT | Original uploaded filename (null for reset/rollback) |
+| `source_filename` | TEXT | Original uploaded filename (null for reset) |
 | `details` | TEXT | Human-readable summary (e.g. "42 rows loaded") |
 | `snapshot_account_mapping` | TEXT | Full JSON snapshot of account_mapping at this point |
 | `snapshot_exchange_rates` | TEXT | Full JSON snapshot of exchange_rates at this point |
@@ -286,20 +301,19 @@ CREATE TABLE IF NOT EXISTS config_history (
 );
 ```
 
-**Append-only** — never updated, only inserted.
-**Rollback:** reads snapshot columns, bulk-inserts back into the live tables, records a new `rollback` history entry.
+**Append-only** — never updated, only inserted. Snapshots retained for Phase 2 rollback capability.
 
 ### 4. Configuration History with Rollback
 
-**Why:** Users may accidentally upload wrong configs (wrong file, wrong mode). Without rollback, they'd need to re-upload the correct file — which they may not have readily available. History snapshots capture the full state at each change, allowing recovery.
+**Why:** Audit trail for accountability — users can see what config changes were made and when.
 
 **How it works:**
 - `save_history_entry()` is called on every config change (upload, reset)
-- Each entry stores: timestamp, action, config_type, source_filename, details, plus full snapshots of both `account_mapping.json` and `exchange_rates.json` at that moment
+- Each entry stores: timestamp, action, config_type, source_filename, details, plus full snapshots of both configs at that moment
 - `list_history()` returns summaries (without bulky snapshots) for display as a read-only table
-- UI displays: Timestamp, Action, Config, Details — no rollback button
-- Rollback is manual: user navigates to the history folder (`%LOCALAPPDATA%/CTR-FX-Remeasurement/history/`) and deletes the most recent JSON file to revert
-- Programmatic rollback via API (`rollback_to_entry()`) is retained in the backend for Phase 2 UI support
+- UI displays: Timestamp, Action, Config, Details — read-only audit log
+- Snapshots are stored for Phase 2 rollback capability but not used in Phase 1
+- **Phase 1 recovery from bad upload:** download current config → edit in Excel → re-upload with Replace mode
 
 ### 5. COLUMN_MAPPINGS Vectorized Pattern in fx_processor.py
 
@@ -433,7 +447,7 @@ Rows within each worksheet are sorted by Account Number ascending (FR-010).
 | 11 | Re-measured Balance | col7 * col10 (Period End) or col8 (Historical) |
 | 12 | FX (Gain) or Loss | col11 - col8 |
 
-**Number Formatting:** Numeric output columns (7, 8, 10, 11, 12) use at least 2 decimal places formatting (FR-014).
+**Number Formatting:** All numeric values are stored and calculated using Python `Decimal` — no float conversion at any stage. Output columns preserve the exact precision from the input. No rounding or truncation. What the user uploads is exactly what they get back.
 
 ### Data Quality Handling (FR-011)
 

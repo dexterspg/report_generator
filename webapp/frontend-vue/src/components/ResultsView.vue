@@ -24,15 +24,7 @@
         </div>
       </div>
 
-      <div v-if="(result?.warnings || []).length > 0" style="text-align:left;margin-bottom:12px;font-size:11px;color:#d4a017;background:#fffbeb;border:1px solid #fde68a;border-radius:3px;padding:8px">
-        <strong>Warnings:</strong>
-        <ul style="margin-top:4px;padding-left:16px">
-          <li v-for="w in result.warnings" :key="w">{{ w }}</li>
-        </ul>
-      </div>
-
-      <div style="display:flex;gap:8px;justify-content:center;margin-top:16px">
-        <button class="btn btn-sm" @click="$emit('new-upload')">New Upload</button>
+      <div style="margin-top:16px">
         <button class="btn btn-blue" @click="downloadOutput">Download Output</button>
       </div>
     </div>

@@ -78,8 +78,8 @@ Today, getting to that number is entirely manual:
 
 **US-09 — Configuration History and Rollback**
 - **As a** client accountant
-- **I want to** view a history of all configuration changes (uploads, resets, rollbacks) and rollback to any previous state if I make a mistake
-- **So that** I can recover from accidental overwrites or incorrect configuration uploads without losing data
+- **I want to** view a history of all configuration changes (uploads, resets) as a read-only audit trail
+- **So that** I can see what config changes were made and when. Recovery from a bad upload is done by downloading the current config, editing in Excel, and re-uploading with Replace mode
 - **Priority:** P0 (must)
 
 ### Phase 2 (Future) — Multi-Period & Exclusions
@@ -153,7 +153,7 @@ Today, getting to that number is entirely manual:
 
 **FR-009:** The system shall accept two configuration inputs, both supplied as file uploads (`.xlsx`, `.xls`, or `.csv`):
 - **Account mapping** — maps Account Number to Account Type, Monetary classification, and Rate method. Uploaded as a file with columns: `Account Number`, `Account Type`, `Monetary?`, `Rate`. The Rate column specifies whether the account uses "Historical" or "Period End" rates. Supports two upload modes: **Replace** (clear existing, load from file) and **Merge** (add new entries, update existing entries with the same Account Number). The current mapping can be downloaded as an Excel file for sharing with other users. A Reset button clears all saved mapping data.
-- **Period-end exchange rates** — spot rates per currency pair. Uploaded as a file with columns: `ObjectId`, `RateType`, `FromCurrency`, `ToCurrency`, `ValidFrom`, `ExchangeRate`. `ObjectId` is used internally for duplicate detection and is not displayed in the UI. The system matches `FromCurrency` to the account's contract currency and `ToCurrency` to the company currency to find the correct spot rate. Supports the same **Replace** and **Merge** upload modes. The current rates can be downloaded as an Excel file for sharing. A Reset button clears all saved rate data.
+- **Period-end exchange rates** — spot rates per currency pair. Uploaded as a file with columns: `RateType`, `FromCurrency`, `ToCurrency`, `ValidFrom`, `ExchangeRate`. The system matches `FromCurrency` to the account's contract currency and `ToCurrency` to the company currency to find the correct spot rate. Duplicate detection uses the composite key `{FromCurrency, ToCurrency, ValidFrom}`. Supports the same **Replace** and **Merge** upload modes. The current rates can be downloaded as an Excel file for sharing. A Reset button clears all saved rate data.
 
 Both configuration files are independent of the CTR report — they can be uploaded, downloaded, shared, and managed before any CTR file is processed.
 
@@ -170,7 +170,7 @@ Both configuration files are independent of the CTR report — they can be uploa
 - Data rows starting immediately after headers (row 2)
 - No metadata or non-tabular content in the output sheet
 
-**FR-014:** The system shall preserve numeric precision for currency amounts (at least 2 decimal places for standard currencies).
+**FR-014:** The system shall preserve exact numeric precision for all currency amounts and exchange rates. No rounding, truncation, or float conversion at any stage — what the user uploads is exactly what appears in the output. All arithmetic uses exact decimal computation.
 
 **FR-015:** The output file shall be named with a pattern: `CTR_FX_Remeasurement_{FiscalYear}_{FiscalPeriod}_{Timestamp}.xlsx`. For CSV inputs where fiscal year/period metadata is unavailable, the pattern shall fall back to `CTR_FX_Remeasurement_Unknown_Unknown_{Timestamp}.xlsx`.
 
@@ -181,7 +181,7 @@ Both configuration files are independent of the CTR report — they can be uploa
 **FR-017:** The application shall follow a two-step configure-then-process workflow:
 - **Step 1 — Configuration:** User manages two configuration files (account mapping and exchange rates) via upload, download, replace, merge, and reset operations. Each config shows a preview table of the current saved data. Configs persist locally and are available across sessions.
 - **Step 2 — Upload & Process:** User uploads the CTR report file. The Process button is disabled until both configurations are loaded. Processing runs asynchronously with job ID and status polling.
-- **Results:** Upon completion, the results view shows a summary (input rows, output rows, currencies) and a download button. No detailed output table or warnings are displayed in the UI — the full output is in the downloaded Excel file.
+- **Results:** Upon completion, the results view shows the source filename, fiscal year/period, processing time, summary stats (input rows, output rows, currencies), and a download button. No detailed output table or warnings are displayed in the UI — the full output is in the downloaded Excel file.
 
 **FR-018:** The application shall support both desktop mode (primary — single-user, `localhost:5001`, auto-opens browser) and web mode (secondary — multi-user server, `0.0.0.0:8000`). Desktop mode is the primary deployment target.
 
@@ -220,11 +220,11 @@ Both configuration files are independent of the CTR report — they can be uploa
 
 ### Configuration History & Rollback
 
-**FR-028:** The system shall automatically record a history entry for every configuration change (upload, reset, rollback). Each history entry shall include:
+**FR-028:** The system shall automatically record a history entry for every configuration change (upload, reset). Each history entry shall include:
 - Timestamp, action type, config type affected, source filename (if applicable)
 - A full snapshot of both configuration files at the time of the action
 
-**FR-029:** The system shall display the history of configuration changes as a read-only table (most recent first) with columns: Timestamp, Action, Config, Details. Rollback is performed manually by the user navigating to the history folder and deleting the most recent entry. The UI does not provide a rollback button — this is a Phase 2 feature.
+**FR-029:** The system shall display the history of configuration changes as a read-only audit table (most recent first) with columns: Timestamp, Action, Config, Details. The table shall be limited to the most recent 50 entries to prevent page overflow. A "Clear History" button shall delete all history entries. No rollback capability in Phase 1 — recovery from bad uploads is done by downloading the config, editing in Excel, and re-uploading with Replace mode. Rollback (restore from snapshot) is a Phase 2 feature.
 
 **FR-030:** History data shall be stored locally alongside configuration data (same `%LOCALAPPDATA%` path for desktop, same backend directory for dev).
 
@@ -277,7 +277,7 @@ Both configuration files are independent of the CTR report — they can be uploa
 
 **Given** amounts with decimal values (e.g., 1234.56)
 **When** aggregated and displayed in output
-**Then** precision shall be preserved to at least 2 decimal places
+**Then** precision shall be preserved exactly — no rounding or truncation
 
 ### US-03: Exchange Rate and Account Classification Input
 
@@ -363,28 +363,30 @@ Both configuration files are independent of the CTR report — they can be uploa
 - Identify and validate required columns
 - Group data by {Account Number, Account Name, Contract Currency}
 - Aggregate Amount in Contract Currency and Amount in Company Currency
-- Accept account mapping as file upload (CSV/Excel) with replace/merge modes
-- Accept period-end exchange rates as file upload (CSV/Excel) with replace/merge modes
-- Download current configs as Excel for sharing between desktop users
+- Accept account mapping as file upload (CSV/Excel) with Replace/Merge modes
+- Accept period-end exchange rates as file upload (CSV/Excel) with Replace/Merge modes
+- Download current configs as Excel files for sharing between desktop users
+- Reset (Clear All) buttons to clear saved configs
+- Download output Excel file (FX Gain/Loss results) — `CTR_FX_Remeasurement_{FY}_{FP}_{Timestamp}.xlsx`
 - Apply rate logic based on the Rate column in account mapping (Historical or Period End)
 - Look up spot exchange rate by matching FromCurrency → contract currency and ToCurrency → company currency
 - Calculate Re-measured Balance (col7 × spot rate for Period End accounts, = col8 for Historical accounts)
 - **Calculate FX (Gain) or Loss per account (col11 − col8) — the primary deliverable**
 - Create one worksheet per unique currency with all 12 columns populated (including Contract ID)
 - Sort by Account Number
-- Build standalone desktop application (`.exe` via PyInstaller) with configure-upload-process-download workflow
-- Local configuration history with rollback capability
+- Build standalone desktop application (`.exe` via PyInstaller) with upload-process-download workflow
 - Local data storage in `%LOCALAPPDATA%/CTR-FX-Remeasurement/` (no admin rights, survives updates)
 - Follow same architectural pattern as existing CTR Mapper (FastAPI + Vue.js)
 - Support both desktop (primary) and web (secondary) modes
 - English-only interface
 
 ### Out of Scope (Phase 2+)
+- Configuration preview tables (view current account mapping and exchange rates as data tables)
+- Rollback capability (restore config from history snapshot via UI or API)
 - Prior period FX adjustment carryforward
 - P&L account exclusion logic (auto-filtering Interest, Depreciation, etc.)
 - Multi-company output (separate files per company)
 - Database persistence of historical results
-- Cloud/server-based configuration sharing (users share via downloaded Excel files instead)
 
 ---
 
@@ -397,10 +399,10 @@ Both configuration files are independent of the CTR report — they can be uploa
 
 ### Additional Inputs (Phase 1) — Configuration Files
 - **Account mapping** — Account Type, Monetary classification, and Rate method per GL account. Uploaded as CSV or Excel file with columns: `Account Number`, `Account Type`, `Monetary?`, `Rate`. Supports Replace and Merge upload modes. Downloadable as Excel for sharing.
-- **Period-end exchange rates** — spot rates per currency pair. Uploaded as CSV or Excel file with columns: `ObjectId`, `RateType`, `FromCurrency`, `ToCurrency`, `ValidFrom`, `ExchangeRate`. `ObjectId` is used for duplicate detection (hidden in UI). The system matches `FromCurrency` to the contract currency and `ToCurrency` to the company currency. Supports Replace and Merge upload modes. Downloadable as Excel for sharing.
+- **Period-end exchange rates** — spot rates per currency pair. Uploaded as CSV or Excel file with columns: `RateType`, `FromCurrency`, `ToCurrency`, `ValidFrom`, `ExchangeRate`. Duplicate detection uses composite key `{FromCurrency, ToCurrency, ValidFrom}`. The system matches `FromCurrency` to the contract currency and `ToCurrency` to the company currency. Supports Replace and Merge upload modes. Downloadable as Excel for sharing.
 
 ### Local Configuration Storage
-- **Account mapping config** — JSON file in `%LOCALAPPDATA%/CTR-FX-Remeasurement/config/`; updated on every upload, merge, reset, or rollback; survives application restarts and `.exe` updates.
+- **Account mapping config** — stored in SQLite at `%LOCALAPPDATA%/CTR-FX-Remeasurement/ctr_fx.db`; updated on every upload, merge, or reset; survives application restarts and `.exe` updates.
 - **Exchange rates config** — JSON file in same location; same lifecycle.
 - **Configuration history** — JSON files in `%LOCALAPPDATA%/CTR-FX-Remeasurement/history/`; one file per history entry; includes full snapshots of both configs at time of action.
 
@@ -463,6 +465,9 @@ Both configuration files are independent of the CTR report — they can be uploa
 - Cumulative FX balance tracking
 - Multi-company file output (ZIP with one file per company code)
 - Audit trail and calculation transparency (e.g., formula audit table)
+- Configuration preview tables with single-row delete/edit capability (Phase 1 workaround: download, edit in Excel, re-upload with Replace)
+- Rollback UI button in history view
+- Downloadable error log
 
 ### Beyond Phase 2: Integration & Automation
 - Direct API integration with Nakisa to fetch CTR automatically

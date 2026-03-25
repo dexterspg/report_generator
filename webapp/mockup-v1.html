@@ -1,0 +1,1661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CTR FX Remeasurement — Phase 1 Wireframe</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ================================================================
+   DESIGN SYSTEM — CTR FX Remeasurement (Phase 1)
+   Aesthetic: Nordic Finance — layered depth, geometric precision,
+   confident color. Bloomberg meets Scandinavian clarity.
+   ================================================================ */
+
+:root {
+  --nakisa: #009cde;
+  --nakisa-deep: #0078b4;
+  --nakisa-glow: rgba(0,156,222,0.15);
+  --nakisa-glow-strong: rgba(0,156,222,0.25);
+
+  --bg-base: #f0f2f5;
+  --bg-card: #ffffff;
+  --bg-inset: #f7f8fa;
+  --bg-hover: #eceef2;
+  --bg-sidebar-from: #009cde;
+  --bg-sidebar-to: #0074a8;
+  --bg-sidebar-hover: rgba(255,255,255,0.1);
+  --bg-sidebar-active: rgba(255,255,255,0.18);
+
+  --border-subtle: #e4e7ec;
+  --border-medium: #d0d5dd;
+
+  --text-primary: #101828;
+  --text-secondary: #475467;
+  --text-tertiary: #98a2b3;
+  --text-on-dark: #ffffff;
+  --text-on-dark-muted: rgba(255,255,255,0.85);
+
+  --success: #12b76a;
+  --success-bg: #ecfdf3;
+  --success-border: #a6f4c5;
+  --warn: #f79009;
+  --warn-bg: #fffaeb;
+  --warn-border: #fedf89;
+  --error: #f04438;
+  --error-bg: #fef3f2;
+
+  --font-display: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Cascadia Code', monospace;
+
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px;
+  --sp-12: 48px;
+
+  --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 20px;
+
+  --shadow-xs: 0 1px 2px rgba(16,24,40,0.05);
+  --shadow-sm: 0 1px 3px rgba(16,24,40,0.1), 0 1px 2px rgba(16,24,40,0.06);
+  --shadow-md: 0 4px 8px -2px rgba(16,24,40,0.1), 0 2px 4px -2px rgba(16,24,40,0.06);
+  --shadow-lg: 0 12px 16px -4px rgba(16,24,40,0.08), 0 4px 6px -2px rgba(16,24,40,0.03);
+  --shadow-blue: 0 0 0 4px var(--nakisa-glow), 0 1px 2px rgba(0,0,0,0.06);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-display);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+}
+
+/* ---- Page wrapper (full-screen app view) ---- */
+.page {
+  background: var(--bg-card);
+  width: 100%;
+  min-height: 100vh;
+  border-bottom: 4px solid var(--border-subtle);
+  overflow: hidden;
+  animation: pageIn 0.5s ease both;
+}
+.page:last-child { border-bottom: none; }
+.page:nth-child(2) { animation-delay: 0.08s; }
+.page:nth-child(3) { animation-delay: 0.16s; }
+.page:nth-child(4) { animation-delay: 0.24s; }
+.page:nth-child(5) { animation-delay: 0.32s; }
+
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.page-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: white;
+  padding: var(--sp-2) var(--sp-6);
+  background: linear-gradient(90deg, var(--nakisa) 0%, var(--bg-sidebar-from) 100%);
+}
+
+/* ---- Header ---- */
+.header {
+  padding: var(--sp-6) var(--sp-8);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  position: relative;
+}
+.header::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 120px;
+  height: 3px;
+  background: linear-gradient(90deg, var(--nakisa) 0%, transparent 100%);
+  border-radius: 3px;
+}
+.header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--text-primary);
+}
+.header .subtitle {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+  font-weight: 400;
+}
+
+/* ---- Layout ---- */
+.layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: calc(100vh - 95px);
+}
+
+/* ---- Sidebar ---- */
+.sidebar {
+  background: linear-gradient(180deg, var(--bg-sidebar-from) 0%, var(--bg-sidebar-to) 100%);
+  padding: var(--sp-6) 0;
+  display: flex;
+  flex-direction: column;
+}
+.sidebar-section { margin-bottom: var(--sp-5); }
+.sidebar-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: rgba(255,255,255,0.55);
+  padding: 0 var(--sp-5);
+  margin-bottom: var(--sp-2);
+}
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-5);
+  margin: 1px var(--sp-2);
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.8);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+}
+.sidebar-item:hover {
+  background: var(--bg-sidebar-hover);
+  color: #ffffff;
+}
+.sidebar-item.active {
+  background: var(--bg-sidebar-active);
+  color: white;
+  font-weight: 600;
+}
+.sidebar-item.active::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  background: white;
+  border-radius: 0 3px 3px 0;
+}
+.sidebar-item svg {
+  width: 16px;
+  height: 16px;
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+.sidebar-item.active svg { opacity: 1; }
+.sidebar-item:hover svg { opacity: 1; }
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: var(--sp-4) var(--sp-5);
+  border-top: 1px solid rgba(255,255,255,0.15);
+}
+.sidebar-footer .version {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: rgba(255,255,255,0.5);
+  letter-spacing: 0.5px;
+}
+
+/* ---- Content ---- */
+.content {
+  padding: var(--sp-8) var(--sp-10);
+  background: var(--bg-base);
+  overflow: auto;
+}
+.content h2 {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  margin-bottom: var(--sp-1);
+}
+.content .desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: var(--sp-6);
+  line-height: 1.6;
+}
+
+/* ---- Upload zone ---- */
+.upload-zone {
+  position: relative;
+  border: 2px dashed var(--border-medium);
+  border-radius: var(--r-lg);
+  padding: var(--sp-10) var(--sp-8);
+  text-align: center;
+  background: var(--bg-card);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  margin-bottom: var(--sp-6);
+  overflow: hidden;
+}
+.upload-zone::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, var(--nakisa-glow) 0%, transparent 50%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.upload-zone:hover {
+  border-color: var(--nakisa);
+  box-shadow: var(--shadow-blue);
+}
+.upload-zone:hover::before { opacity: 1; }
+.upload-zone:hover .upload-icon { transform: translateY(-2px); }
+
+.upload-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto var(--sp-4);
+  background: var(--bg-inset);
+  border-radius: var(--r-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.25s ease;
+  position: relative;
+  z-index: 1;
+}
+.upload-icon svg {
+  width: 24px;
+  height: 24px;
+  color: var(--nakisa);
+}
+.upload-zone h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: var(--sp-1);
+  position: relative;
+  z-index: 1;
+}
+.upload-zone .upload-hint {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  position: relative;
+  z-index: 1;
+}
+.upload-zone .upload-hint span {
+  color: var(--nakisa);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.upload-zone .file-types {
+  display: inline-flex;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  position: relative;
+  z-index: 1;
+}
+.upload-zone .file-types .tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 8px;
+  background: var(--bg-inset);
+  border-radius: 4px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.5px;
+}
+.upload-zone .size-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: var(--sp-2);
+  position: relative;
+  z-index: 1;
+}
+
+/* ---- Readiness checklist ---- */
+.section-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-tertiary);
+  margin-bottom: var(--sp-3);
+}
+.readiness {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-6);
+}
+.readiness-card {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: var(--r-md);
+  border: 1px solid;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+.readiness-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.readiness-card.ok {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+}
+.readiness-card.warn {
+  background: var(--warn-bg);
+  border-color: var(--warn-border);
+}
+.readiness-card .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  position: relative;
+}
+.readiness-card.ok .dot { background: var(--success); }
+.readiness-card.warn .dot {
+  background: var(--warn);
+  animation: pulse 2s ease infinite;
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(247,144,9,0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(247,144,9,0); }
+}
+.readiness-card .r-info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.readiness-card .r-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.readiness-card .r-status {
+  font-size: 12px;
+  font-weight: 500;
+}
+.readiness-card.ok .r-status { color: var(--success); }
+.readiness-card.warn .r-status { color: var(--warn); }
+
+/* ---- Buttons ---- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  border: none;
+  border-radius: var(--r-sm);
+  font-family: var(--font-display);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.btn svg { width: 16px; height: 16px; }
+
+.btn-md {
+  height: 40px;
+  padding: 0 var(--sp-5);
+  font-size: 14px;
+}
+.btn-sm {
+  height: 34px;
+  padding: 0 var(--sp-4);
+  font-size: 13px;
+}
+
+.btn-primary {
+  background: linear-gradient(180deg, #00a8ee 0%, var(--nakisa) 100%);
+  color: white;
+  box-shadow: 0 1px 3px rgba(0,156,222,0.4), inset 0 1px 0 rgba(255,255,255,0.15);
+}
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, var(--nakisa) 0%, var(--nakisa-deep) 100%);
+  box-shadow: 0 4px 12px rgba(0,156,222,0.35), inset 0 1px 0 rgba(255,255,255,0.1);
+  transform: translateY(-1px);
+}
+.btn-primary:active:not(:disabled) { transform: translateY(0); }
+.btn-primary:disabled {
+  background: var(--border-medium);
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.btn-secondary {
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-medium);
+  box-shadow: var(--shadow-xs);
+}
+.btn-secondary:hover {
+  background: var(--bg-inset);
+  color: var(--text-primary);
+  border-color: var(--text-tertiary);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-tertiary);
+}
+.btn-ghost:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.btn-danger {
+  background: transparent;
+  color: var(--error);
+}
+.btn-danger:hover {
+  background: var(--error-bg);
+}
+
+.button-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+/* ---- Card ---- */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.card-head {
+  padding: var(--sp-4) var(--sp-6);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-inset);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.card-head h3 {
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.card-head h3 svg { width: 16px; height: 16px; color: var(--text-tertiary); }
+.card-body { padding: var(--sp-6); }
+.card-foot {
+  padding: var(--sp-4) var(--sp-6);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-inset);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ---- Upload zone inside card (smaller) ---- */
+.card .upload-zone {
+  padding: var(--sp-6) var(--sp-5);
+  margin-bottom: var(--sp-5);
+}
+.card .upload-zone .upload-icon {
+  width: 40px;
+  height: 40px;
+}
+.card .upload-zone .upload-icon svg { width: 20px; height: 20px; }
+
+/* ---- Mode toggle ---- */
+.field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: var(--sp-2);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.modes {
+  display: inline-flex;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-sm);
+  padding: 3px;
+  gap: 2px;
+}
+.mode-btn {
+  padding: var(--sp-1) var(--sp-4);
+  border: none;
+  border-radius: 5px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 500;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.mode-btn:hover { color: var(--text-primary); }
+.mode-btn.active {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: var(--shadow-xs);
+}
+
+/* Column info chips */
+.col-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+.col-chip {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 10px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--text-secondary);
+}
+
+/* ---- Table ---- */
+.table-wrap { overflow-x: auto; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+table thead th {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-tertiary);
+  text-align: left;
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 2px solid var(--border-subtle);
+  background: var(--bg-inset);
+  position: sticky;
+  top: 0;
+}
+table tbody td {
+  font-size: 13px;
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+table tbody tr:hover { background: var(--bg-inset); }
+.empty-state {
+  text-align: center;
+  padding: var(--sp-10) var(--sp-6) !important;
+  color: var(--text-tertiary) !important;
+}
+.empty-state svg {
+  width: 40px;
+  height: 40px;
+  margin-bottom: var(--sp-3);
+  opacity: 0.3;
+}
+.empty-state p {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+/* ---- Stats ---- */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-4);
+  margin: var(--sp-8) 0;
+}
+.stat-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  padding: var(--sp-5) var(--sp-6);
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow-xs);
+}
+.stat-box::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+}
+.stat-box:nth-child(1)::before { background: var(--nakisa); }
+.stat-box:nth-child(2)::before { background: var(--success); }
+.stat-box:nth-child(3)::before { background: #8b5cf6; }
+.stat-num {
+  font-family: var(--font-mono);
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -2px;
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+.stat-name {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-tertiary);
+  margin-top: var(--sp-2);
+}
+
+/* ---- Results ---- */
+.results-hero {
+  text-align: center;
+  padding: var(--sp-12) var(--sp-8);
+}
+.results-badge {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto var(--sp-5);
+  background: var(--success-bg);
+  border: 2px solid var(--success-border);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: badgePop 0.4s ease 0.2s both;
+}
+@keyframes badgePop {
+  from { transform: scale(0.6); opacity: 0; }
+  60%  { transform: scale(1.1); }
+  to   { transform: scale(1); opacity: 1; }
+}
+.results-badge svg { width: 32px; height: 32px; color: var(--success); }
+.results-hero h2 { margin-bottom: var(--sp-2); }
+.results-hero .meta {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-tertiary);
+  margin-bottom: var(--sp-4);
+}
+
+/* ---- File attached state ---- */
+.file-attached {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  background: var(--bg-card);
+  margin-bottom: var(--sp-6);
+  box-shadow: var(--shadow-xs);
+}
+.file-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-sm);
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.file-icon svg { width: 22px; height: 22px; color: white; }
+.file-info { flex: 1; min-width: 0; }
+.file-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.file-meta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+.file-remove {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+.file-remove:hover {
+  background: var(--error-bg);
+  color: var(--error);
+}
+.file-remove svg { width: 18px; height: 18px; }
+
+/* ---- Processing state ---- */
+.processing-overlay {
+  text-align: center;
+  padding: var(--sp-12) var(--sp-8);
+}
+.spinner-ring {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto var(--sp-6);
+  border: 3px solid var(--border-subtle);
+  border-top-color: var(--nakisa);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.processing-overlay h2 {
+  font-size: 18px;
+  margin-bottom: var(--sp-2);
+}
+.processing-overlay .proc-sub {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: var(--sp-6);
+}
+.progress-track {
+  width: 100%;
+  max-width: 400px;
+  height: 6px;
+  background: var(--bg-inset);
+  border-radius: 3px;
+  margin: 0 auto var(--sp-3);
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  width: 65%;
+  background: linear-gradient(90deg, var(--nakisa) 0%, #00c2ff 100%);
+  border-radius: 3px;
+  animation: progressPulse 2s ease infinite;
+}
+@keyframes progressPulse {
+  0%   { opacity: 1; }
+  50%  { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+.progress-pct {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--nakisa);
+}
+.proc-steps {
+  display: flex;
+  justify-content: center;
+  gap: var(--sp-6);
+  margin-top: var(--sp-8);
+}
+.proc-step {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 12px;
+  font-weight: 500;
+}
+.proc-step .step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.proc-step.done .step-dot { background: var(--success); }
+.proc-step.active .step-dot {
+  background: var(--nakisa);
+  animation: pulse 1.5s ease infinite;
+}
+.proc-step.pending .step-dot { background: var(--border-medium); }
+.proc-step.done { color: var(--success); }
+.proc-step.active { color: var(--nakisa); font-weight: 600; }
+.proc-step.pending { color: var(--text-tertiary); }
+
+/* ---- Error state ---- */
+.error-box {
+  text-align: center;
+  padding: var(--sp-10) var(--sp-8);
+}
+.error-badge {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto var(--sp-5);
+  background: var(--error-bg);
+  border: 2px solid #fecaca;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.error-badge svg { width: 28px; height: 28px; color: var(--error); }
+.error-box h2 {
+  font-size: 18px;
+  color: var(--error);
+  margin-bottom: var(--sp-2);
+}
+.error-box .error-msg {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: var(--sp-6);
+  max-width: 480px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.6;
+}
+.error-detail {
+  max-width: 520px;
+  margin: 0 auto var(--sp-6);
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--r-md);
+  padding: var(--sp-4);
+  text-align: left;
+}
+.error-detail code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: #991b1b;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.error-box .button-row {
+  justify-content: center;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 768px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .stats-row { grid-template-columns: 1fr 1fr; }
+  .readiness { grid-template-columns: 1fr; }
+  .content { padding: var(--sp-6); }
+}
+@media (max-width: 640px) {
+  .stats-row { grid-template-columns: 1fr; }
+  .content { padding: var(--sp-5); }
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     PAGE 1: UPLOAD CTR
+     ============================================================ -->
+<div class="page">
+  <div class="page-label">Phase 1 &mdash; Upload CTR &amp; Process</div>
+  <div class="header">
+    <h1>CTR FX Remeasurement</h1>
+    <div class="subtitle">Consolidated Transaction Report &mdash; FX Gain/Loss Calculator</div>
+  </div>
+
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Process</div>
+        <div class="sidebar-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Process CTR
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Config</div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+          Account Mapping
+        </div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Exchange Rates
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Audit</div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          History
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <div class="version">v1.0.0-phase1</div>
+      </div>
+    </div>
+
+    <div class="content">
+      <h2>Process CTR</h2>
+      <p class="desc">Upload a CTR file to extract closing balances and calculate FX remeasurement.</p>
+
+      <div class="upload-zone">
+        <div class="upload-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </div>
+        <h3>Drop your CTR file here</h3>
+        <div class="upload-hint">or <span>browse files</span> to upload</div>
+        <div class="file-types">
+          <span class="tag">.xlsx</span>
+          <span class="tag">.xls</span>
+          <span class="tag">.csv</span>
+        </div>
+        <div class="size-hint">Max 50 MB</div>
+      </div>
+
+      <div class="section-label">Readiness Check</div>
+      <div class="readiness">
+        <div class="readiness-card warn">
+          <span class="dot"></span>
+          <div class="r-info">
+            <span class="r-name">Account Mapping</span>
+            <span class="r-status">Not configured</span>
+          </div>
+        </div>
+        <div class="readiness-card warn">
+          <span class="dot"></span>
+          <div class="r-info">
+            <span class="r-name">Exchange Rates</span>
+            <span class="r-status">Not configured</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="button-row">
+        <button class="btn btn-secondary btn-md">Clear</button>
+        <button class="btn btn-primary btn-md" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Process CTR
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     PAGE 1a2: FILE UPLOADED — PARTIAL READINESS (one config missing)
+     ============================================================ -->
+<div class="page">
+  <div class="page-label">Phase 1 &mdash; File Uploaded, Partial Config</div>
+  <div class="header">
+    <h1>CTR FX Remeasurement</h1>
+    <div class="subtitle">Consolidated Transaction Report &mdash; FX Gain/Loss Calculator</div>
+  </div>
+
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Process</div>
+        <div class="sidebar-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Process CTR
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Config</div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+          Account Mapping
+        </div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Exchange Rates
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Audit</div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          History
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <div class="version">v1.0.0-phase1</div>
+      </div>
+    </div>
+
+    <div class="content">
+      <h2>Process CTR</h2>
+      <p class="desc">Upload a CTR file to extract closing balances and calculate FX remeasurement.</p>
+
+      <div class="file-attached">
+        <div class="file-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
+        <div class="file-info">
+          <div class="file-name">CTR 0422.xlsx</div>
+          <div class="file-meta">245 KB &middot; uploaded just now</div>
+        </div>
+        <button class="file-remove">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="section-label">Readiness Check</div>
+      <div class="readiness">
+        <div class="readiness-card ok">
+          <span class="dot"></span>
+          <div class="r-info">
+            <span class="r-name">Account Mapping</span>
+            <span class="r-status">142 accounts</span>
+          </div>
+        </div>
+        <div class="readiness-card warn">
+          <span class="dot"></span>
+          <div class="r-info">
+            <span class="r-name">Exchange Rates</span>
+            <span class="r-status">Not configured</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="button-row">
+        <button class="btn btn-secondary btn-md">Clear</button>
+        <button class="btn btn-primary btn-md" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Process CTR
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     PAGE 1b: FILE UPLOADED — READY TO PROCESS
+     ============================================================ -->
+<div class="page">
+  <div class="page-label">Phase 1 &mdash; File Uploaded &amp; Ready</div>
+  <div class="header">
+    <h1>CTR FX Remeasurement</h1>
+    <div class="subtitle">Consolidated Transaction Report &mdash; FX Gain/Loss Calculator</div>
+  </div>
+
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Process</div>
+        <div class="sidebar-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Process CTR
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Config</div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+          Account Mapping
+        </div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Exchange Rates
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Audit</div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          History
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <div class="version">v1.0.0-phase1</div>
+      </div>
+    </div>
+
+    <div class="content">
+      <h2>Process CTR</h2>
+      <p class="desc">Upload a CTR file to extract closing balances and calculate FX remeasurement.</p>
+
+      <div class="file-attached">
+        <div class="file-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
+        <div class="file-info">
+          <div class="file-name">CTR 0422.xlsx</div>
+          <div class="file-meta">245 KB &middot; uploaded just now</div>
+        </div>
+        <button class="file-remove">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="section-label">Readiness Check</div>
+      <div class="readiness">
+        <div class="readiness-card ok">
+          <span class="dot"></span>
+          <div class="r-info">
+            <span class="r-name">Account Mapping</span>
+            <span class="r-status">142 accounts</span>
+          </div>
+        </div>
+        <div class="readiness-card ok">
+          <span class="dot"></span>
+          <div class="r-info">
+            <span class="r-name">Exchange Rates</span>
+            <span class="r-status">3 pairs loaded</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="button-row">
+        <button class="btn btn-secondary btn-md">Clear</button>
+        <button class="btn btn-primary btn-md">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Process CTR
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     PAGE 1c: PROCESSING STATE
+     ============================================================ -->
+<div class="page">
+  <div class="page-label">Phase 1 &mdash; Processing In Progress</div>
+  <div class="header">
+    <h1>CTR FX Remeasurement</h1>
+    <div class="subtitle">Consolidated Transaction Report &mdash; FX Gain/Loss Calculator</div>
+  </div>
+
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Process</div>
+        <div class="sidebar-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Process CTR
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Config</div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+          Account Mapping
+        </div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Exchange Rates
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Audit</div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          History
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <div class="version">v1.0.0-phase1</div>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="processing-overlay">
+        <div class="spinner-ring"></div>
+        <h2>Processing CTR 0422.xlsx</h2>
+        <div class="proc-sub">Extracting closing balances and calculating FX remeasurement&hellip;</div>
+
+        <div class="progress-track">
+          <div class="progress-fill"></div>
+        </div>
+        <div class="progress-pct">65%</div>
+
+        <div class="proc-steps">
+          <div class="proc-step done">
+            <span class="step-dot"></span>
+            Parse file
+          </div>
+          <div class="proc-step done">
+            <span class="step-dot"></span>
+            Map accounts
+          </div>
+          <div class="proc-step active">
+            <span class="step-dot"></span>
+            FX calculation
+          </div>
+          <div class="proc-step pending">
+            <span class="step-dot"></span>
+            Generate output
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     PAGE 1d: ERROR STATE
+     ============================================================ -->
+<div class="page">
+  <div class="page-label">Phase 1 &mdash; Processing Error</div>
+  <div class="header">
+    <h1>CTR FX Remeasurement</h1>
+    <div class="subtitle">Consolidated Transaction Report &mdash; FX Gain/Loss Calculator</div>
+  </div>
+
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Process</div>
+        <div class="sidebar-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Process CTR
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Config</div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+          Account Mapping
+        </div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Exchange Rates
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Audit</div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          History
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <div class="version">v1.0.0-phase1</div>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="error-box">
+        <div class="error-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        </div>
+        <h2>Processing Failed</h2>
+        <div class="error-msg">
+          The uploaded file is missing 2 required columns. Processing cannot proceed until the file contains all required CTR columns.
+        </div>
+
+        <div class="error-detail">
+          <code>Missing required columns:
+  &bull; Amount in Contract Currency
+  &bull; Amount in Company Currency
+
+Found columns (row 27):
+  Account Number, Account Name, Contract Currency,
+  Company Code, Fiscal Year, Fiscal Period,
+  Transaction Type
+
+Hint: Verify this is a standard CTR export from
+      Nakisa Lease Administration.</code>
+        </div>
+
+        <div class="button-row" style="justify-content: center;">
+          <button class="btn btn-primary btn-md">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Try Again
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     PAGE 2: ACCOUNT MAPPING CONFIG
+     ============================================================ -->
+<div class="page">
+  <div class="page-label">Phase 1 &mdash; Account Mapping Configuration</div>
+  <div class="header">
+    <h1>CTR FX Remeasurement</h1>
+    <div class="subtitle">Consolidated Transaction Report &mdash; FX Gain/Loss Calculator</div>
+  </div>
+
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Process</div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Process CTR
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Config</div>
+        <div class="sidebar-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+          Account Mapping
+        </div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Exchange Rates
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Audit</div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          History
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <div class="version">v1.0.0-phase1</div>
+      </div>
+    </div>
+
+    <div class="content">
+      <h2>Account Mapping</h2>
+      <p class="desc">Maps Account Number to Account Type, Monetary classification, and Rate method.</p>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload Mapping
+          </h3>
+        </div>
+        <div class="card-body">
+          <div class="upload-zone">
+            <div class="upload-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+            <h3>Drop mapping file here</h3>
+            <div class="upload-hint">or <span>browse files</span> to upload</div>
+            <div class="col-chips">
+              <span class="col-chip">Account Number</span>
+              <span class="col-chip">Account Type</span>
+              <span class="col-chip">Monetary?</span>
+              <span class="col-chip">Rate</span>
+            </div>
+            <div class="size-hint">Max 50 MB</div>
+          </div>
+
+          <div class="field-label">Upload Mode</div>
+          <div class="modes">
+            <button class="mode-btn active">Replace</button>
+            <button class="mode-btn">Merge</button>
+          </div>
+        </div>
+        <div class="card-foot">
+          <div class="button-row">
+            <button class="btn btn-danger btn-sm">Clear All</button>
+            <button class="btn btn-secondary btn-sm">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download .xlsx
+            </button>
+          </div>
+          <button class="btn btn-primary btn-sm" disabled>Upload</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     PAGE 3: EXCHANGE RATES CONFIG
+     ============================================================ -->
+<div class="page">
+  <div class="page-label">Phase 1 &mdash; Exchange Rates Configuration</div>
+  <div class="header">
+    <h1>CTR FX Remeasurement</h1>
+    <div class="subtitle">Consolidated Transaction Report &mdash; FX Gain/Loss Calculator</div>
+  </div>
+
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Process</div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Process CTR
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Config</div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+          Account Mapping
+        </div>
+        <div class="sidebar-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Exchange Rates
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Audit</div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          History
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <div class="version">v1.0.0-phase1</div>
+      </div>
+    </div>
+
+    <div class="content">
+      <h2>Exchange Rates</h2>
+      <p class="desc">Period-end spot rates for FX remeasurement. FromCurrency = contract currency, ToCurrency = company currency.</p>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload Rates
+          </h3>
+        </div>
+        <div class="card-body">
+          <div class="upload-zone">
+            <div class="upload-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+            <h3>Drop rates file here</h3>
+            <div class="upload-hint">or <span>browse files</span> to upload</div>
+            <div class="col-chips">
+              <span class="col-chip">RateType</span>
+              <span class="col-chip">FromCurrency</span>
+              <span class="col-chip">ToCurrency</span>
+              <span class="col-chip">ValidFrom</span>
+              <span class="col-chip">ExchangeRate</span>
+            </div>
+            <div class="size-hint">Max 50 MB</div>
+          </div>
+
+          <div class="field-label">Upload Mode</div>
+          <div class="modes">
+            <button class="mode-btn active">Replace</button>
+            <button class="mode-btn">Merge</button>
+          </div>
+        </div>
+        <div class="card-foot">
+          <div class="button-row">
+            <button class="btn btn-danger btn-sm">Clear All</button>
+            <button class="btn btn-secondary btn-sm">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download .xlsx
+            </button>
+          </div>
+          <button class="btn btn-primary btn-sm" disabled>Upload</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     PAGE 4: RESULTS VIEW
+     ============================================================ -->
+<div class="page">
+  <div class="page-label">Phase 1 &mdash; Results View (after processing)</div>
+  <div class="header">
+    <h1>CTR FX Remeasurement</h1>
+    <div class="subtitle">Consolidated Transaction Report &mdash; FX Gain/Loss Calculator</div>
+  </div>
+
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Process</div>
+        <div class="sidebar-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Process CTR
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Config</div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+          Account Mapping
+        </div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Exchange Rates
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Audit</div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          History
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <div class="version">v1.0.0-phase1</div>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="results-hero">
+        <div class="results-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <h2>Processing Complete</h2>
+        <div class="meta">file.xlsx &mdash; FY 2025 &middot; Period 12 &middot; 2.3s</div>
+
+        <div class="stats-row">
+          <div class="stat-box">
+            <div class="stat-num">1,234</div>
+            <div class="stat-name">Input Rows</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-num">567</div>
+            <div class="stat-name">Output Rows</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-num">3</div>
+            <div class="stat-name">Currencies</div>
+          </div>
+        </div>
+
+        <div class="button-row" style="justify-content: center;">
+          <button class="btn btn-primary btn-md">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download Output
+          </button>
+          <button class="btn btn-secondary btn-md">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Process Another File
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     PAGE 5: HISTORY VIEW
+     ============================================================ -->
+<div class="page">
+  <div class="page-label">Phase 1 &mdash; History (read-only)</div>
+  <div class="header">
+    <h1>CTR FX Remeasurement</h1>
+    <div class="subtitle">Consolidated Transaction Report &mdash; FX Gain/Loss Calculator</div>
+  </div>
+
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Process</div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Process CTR
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Config</div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+          Account Mapping
+        </div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Exchange Rates
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Audit</div>
+        <div class="sidebar-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          History
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <div class="version">v1.0.0-phase1</div>
+      </div>
+    </div>
+
+    <div class="content">
+      <h2>Config History</h2>
+      <p class="desc">Audit trail of configuration changes. To recover from a bad upload, download the current config, edit in Excel, and re-upload with Replace mode.</p>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Recent Changes
+          </h3>
+          <button class="btn btn-danger btn-sm">Clear History</button>
+        </div>
+        <div class="card-body" style="padding: 0; max-height: 400px; overflow-y: auto;">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Action</th>
+                  <th>Config</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colspan="4" class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                    <p>No history yet</p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
