@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple
 # Processors may require a subset of these; ctr_reader rejects the file only
 # when one or more of these shared columns is missing entirely.
 CORE_CTR_COLUMNS = [
+    "Contract ID",
     "Account Number",
     "Account Name",
     "Contract Currency",
@@ -28,7 +29,7 @@ CORE_CTR_COLUMNS = [
     "Amount in Company Currency",
     "Fiscal Year",
     "Fiscal Period",
-    "Company Code",
+    "Company",
     "Transaction Type",
 ]
 
@@ -40,7 +41,7 @@ _METADATA_LABELS: Dict[str, str] = {
     "accounting standard": "accounting_standard",
     "contract currency": "contract_currency",
     "company currency": "company_currency",
-    "company code": "company_code",
+    "company": "company_code",
 }
 
 # Number of metadata rows before the header in an Excel CTR export (rows 1-26).
@@ -80,6 +81,7 @@ def _extract_metadata_from_excel(file_path: str) -> Tuple[Dict[str, Optional[str
                             break
 
     return metadata, warnings
+
 
 
 def _empty_metadata() -> Dict[str, Optional[str]]:

@@ -10,9 +10,6 @@ class ProcessingRequest(BaseModel):
     input_header_start: int = Field(
         default=27, description="Row number where headers start (1-indexed)"
     )
-    input_data_start: int = Field(
-        default=28, description="Row number where data starts (1-indexed)"
-    )
 
 
 class ProcessingResponse(BaseModel):
@@ -37,12 +34,3 @@ class JobStatus(BaseModel):
     completed_at: Optional[datetime] = None
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
-
-
-class FileInfo(BaseModel):
-    """File information model"""
-
-    filename: str
-    size: int
-    content_type: str
-    upload_time: datetime

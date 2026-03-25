@@ -175,6 +175,20 @@ webapp/
 - Same download, reset, and history tracking capabilities
 - Currency codes normalized to uppercase; rates parsed as floats
 
+**Why SQLite (not JSON) for exchange rates:**
+Clients may have multiple rates per currency pair across different time periods (e.g. monthly period-end rates). The processor must find the rate valid on or before the CTR's fiscal period date — a date-range lookup that is error-prone in flat JSON but trivial in SQL. Account mapping has no time dimension, so it stays as JSON.
+
+**Rate lookup query (executed by `config_store.py`):**
+```sql
+SELECT exchange_rate FROM exchange_rates
+WHERE from_currency = ? AND to_currency = ?
+  AND valid_from <= ?
+ORDER BY valid_from DESC
+LIMIT 1
+```
+
+**Future migration note:** Raw `sqlite3` (Python stdlib) is used — zero added bundle size, no client install. When deploying to Render, swap `config_store.py`'s connection to PostgreSQL (connection string change only). SQL queries are compatible. SQLAlchemy can be introduced at that point if needed.
+
 ### 3. Local Storage in %LOCALAPPDATA%
 
 **Why:** Desktop `.exe` users should not need admin rights, and config data should survive when a new version of the `.exe` is distributed. `%LOCALAPPDATA%` is per-user, writable without elevation, and independent of the `.exe` location.
@@ -182,13 +196,98 @@ webapp/
 **Storage structure:**
 ```
 %LOCALAPPDATA%/CTR-FX-Remeasurement/
-  config/
-    account_mapping.json          -- Current account mapping
-    exchange_rates.json           -- Current exchange rates
-  history/
-    {uuid}.json                   -- One file per history entry
+  ctr_fx.db                       -- Single SQLite database (all persistent data)
   uploads/                        -- Temporary files (auto-cleaned after 1 hour)
 ```
+
+### 3a. Database Schema
+
+All persistent data lives in a single SQLite file: `ctr_fx.db`. Three tables.
+
+---
+
+**`account_mapping` table**
+
+| Column | Type | Description |
+|---|---|---|
+| `account_number` | TEXT PRIMARY KEY | Account number from CTR — merge key |
+| `account_type` | TEXT | `BS` or `P&L` |
+| `monetary` | TEXT | `Yes` or `No` |
+| `rate` | TEXT | `Historical` or `Period End` |
+
+```sql
+CREATE TABLE IF NOT EXISTS account_mapping (
+    account_number TEXT PRIMARY KEY,
+    account_type   TEXT NOT NULL,
+    monetary       TEXT NOT NULL,
+    rate           TEXT NOT NULL
+);
+```
+
+**Merge key:** `account_number` — `INSERT OR REPLACE` on merge.
+**Replace mode:** `DELETE FROM account_mapping` then bulk insert.
+
+---
+
+**`exchange_rates` table**
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | TEXT PRIMARY KEY | ObjectId from source file — dedup key on merge |
+| `rate_type` | TEXT | Rate type code (e.g. `M` for month-end) |
+| `from_currency` | TEXT | Contract currency (e.g. `EUR`) — normalized to uppercase |
+| `to_currency` | TEXT | Company currency (e.g. `USD`) — normalized to uppercase |
+| `valid_from` | TEXT | ISO date `YYYY-MM-DD` — the date this rate becomes effective |
+| `exchange_rate` | REAL | The exchange rate value |
+
+```sql
+CREATE TABLE IF NOT EXISTS exchange_rates (
+    id            TEXT PRIMARY KEY,
+    rate_type     TEXT,
+    from_currency TEXT NOT NULL,
+    to_currency   TEXT NOT NULL,
+    valid_from    TEXT NOT NULL,
+    exchange_rate REAL NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_exchange_rates_lookup
+    ON exchange_rates (from_currency, to_currency, valid_from);
+```
+
+**Rate lookup:** most recent rate on or before the CTR fiscal period date.
+**Merge key:** `id` (ObjectId) — `INSERT OR REPLACE` on merge.
+**Replace mode:** `DELETE FROM exchange_rates` then bulk insert.
+
+---
+
+**`config_history` table**
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | TEXT PRIMARY KEY | UUID generated at insert time |
+| `timestamp` | TEXT | ISO datetime `YYYY-MM-DDTHH:MM:SS` |
+| `action` | TEXT | `upload`, `reset`, `rollback` |
+| `config_type` | TEXT | `account_mapping`, `exchange_rates`, `both` |
+| `source_filename` | TEXT | Original uploaded filename (null for reset/rollback) |
+| `details` | TEXT | Human-readable summary (e.g. "42 rows loaded") |
+| `snapshot_account_mapping` | TEXT | Full JSON snapshot of account_mapping at this point |
+| `snapshot_exchange_rates` | TEXT | Full JSON snapshot of exchange_rates at this point |
+
+```sql
+CREATE TABLE IF NOT EXISTS config_history (
+    id                        TEXT PRIMARY KEY,
+    timestamp                 TEXT NOT NULL,
+    action                    TEXT NOT NULL,
+    config_type               TEXT NOT NULL,
+    source_filename           TEXT,
+    details                   TEXT,
+    snapshot_account_mapping  TEXT,
+    snapshot_exchange_rates   TEXT
+);
+```
+
+**Append-only** — never updated, only inserted.
+**Rollback:** reads snapshot columns, bulk-inserts back into the live tables, records a new `rollback` history entry.
 
 ### 4. Configuration History with Rollback
 

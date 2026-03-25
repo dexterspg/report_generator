@@ -10,17 +10,18 @@ output DataFrame — same pattern as the original formula_mapper.py for
 vectorized, efficient pandas operations.
 
 Output columns (FR-008):
-  1  Account Number
-  2  Account Name
-  3  Account Type                 (from account mapping; "N/A" if unmapped)
-  4  Monetary?                    (from account mapping; "N/A" if unmapped)
-  5  Account Currency             (= Contract Currency / worksheet name)
-  6  Balance in Contract Currency (SUM Amount in Contract Currency)
-  7  Initial Measurement Company Currency Balance (SUM Amount in Company Currency)
-  8  Rate                         ("Period End" | "Historical" | blank if unmapped)
-  9  Period-End Spot Exchange Rate (from exchange rates dict; blank if unmapped)
- 10  Re-measured Balance          (col6 * col9 for monetary; col7 for non-monetary; blank if unmapped)
- 11  FX (Gain) or Loss            (col10 - col7; blank if unmapped)
+  1  Contract ID
+  2  Account Number
+  3  Account Name
+  4  Account Type                 (from account mapping; "N/A" if unmapped)
+  5  Monetary?                    (from account mapping; "N/A" if unmapped)
+  6  Account Currency             (= Contract Currency / worksheet name)
+  7  Balance in Contract Currency (SUM Amount in Contract Currency)
+  8  Initial Measurement Company Currency Balance (SUM Amount in Company Currency)
+  9  Rate                         (from account mapping; "Period End" | "Historical" | blank if unmapped)
+ 10  Period-End Spot Exchange Rate (from exchange rates; blank if unmapped)
+ 11  Re-measured Balance          (col7 * col10 for monetary; col8 for non-monetary; blank if unmapped)
+ 12  FX (Gain) or Loss            (col11 - col8; blank if unmapped)
 """
 
 import os
@@ -38,6 +39,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 # ---------------------------------------------------------------------------
 
 OUTPUT_COLUMNS = [
+    "Contract ID",
     "Account Number",
     "Account Name",
     "Account Type",
@@ -60,11 +62,11 @@ RATE_NUMBER_FORMAT = '_-* #,##0.0000_-;-* #,##0.0000_-;_-* "-"??_-;_-@_-'
 
 # Columns that get number formatting (0-indexed positions within OUTPUT_COLUMNS)
 _NUMERIC_FORMAT_MAP = {
-    5: CELL_NUMBER_FORMAT,   # Balance in Contract Currency
-    6: CELL_NUMBER_FORMAT,   # Initial Measurement Company Currency Balance
-    8: RATE_NUMBER_FORMAT,   # Period-End Spot Exchange Rate (4 decimals like TC)
-    9: CELL_NUMBER_FORMAT,   # Re-measured Balance
-    10: CELL_NUMBER_FORMAT,  # FX (Gain) or Loss
+    6: CELL_NUMBER_FORMAT,   # Balance in Contract Currency
+    7: CELL_NUMBER_FORMAT,   # Initial Measurement Company Currency Balance
+    9: RATE_NUMBER_FORMAT,   # Period-End Spot Exchange Rate (4 decimals like TC)
+    10: CELL_NUMBER_FORMAT,  # Re-measured Balance
+    11: CELL_NUMBER_FORMAT,  # FX (Gain) or Loss
 }
 
 # ---------------------------------------------------------------------------
@@ -89,6 +91,10 @@ def _apply_header_styling(worksheet) -> None:
 # Each function takes (grouped_df, account_mapping, exchange_rates) and
 # returns a pd.Series for that column.
 # ---------------------------------------------------------------------------
+
+def _col_contract_id(df, mapping, rates):
+    return df["Contract ID"]
+
 
 def _col_account_number(df, mapping, rates):
     return df["Account Number"]
@@ -123,16 +129,9 @@ def _col_initial_measurement(df, mapping, rates):
 
 
 def _col_rate(df, mapping, rates):
-    """'Period End' for monetary, 'Historical' for non-monetary, None if unmapped."""
-    monetary = _col_monetary(df, mapping, rates)
-    return np.where(
-        monetary == "N/A",
-        None,
-        np.where(
-            monetary.str.strip().str.lower() == "yes",
-            "Period End",
-            "Historical",
-        ),
+    """Rate from account mapping ('Period End' | 'Historical'); None if unmapped."""
+    return df["Account Number"].map(
+        lambda acct: mapping.get(str(acct), {}).get("rate")
     )
 
 
@@ -184,6 +183,7 @@ def _col_fx_gain_loss(df, mapping, rates):
 # ---------------------------------------------------------------------------
 
 COLUMN_MAPPINGS = {
+    "Contract ID": _col_contract_id,
     "Account Number": _col_account_number,
     "Account Name": _col_account_name,
     "Account Type": _col_account_type,
@@ -235,7 +235,7 @@ def process_fx(
         # --- Step 1: Group and aggregate (FR-006) ---
         grouped = (
             df.groupby(
-                ["Account Number", "Account Name", "Contract Currency"],
+                ["Contract ID", "Account Number", "Account Name", "Contract Currency"],
                 as_index=False,
                 sort=False,
             )
