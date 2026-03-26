@@ -1,0 +1,17 @@
+{
+  "name": "ctr-mapper-webapp",
+  "version": "1.0.0",
+  "description": "CTR Mapper Web Application",
+  "scripts": {
+    "watch": "node watch-build.js",
+    "dev-full": "concurrently \"npm run watch\" \"cd backend && python app.py --desktop\"",
+    "build-frontend": "cd frontend-vue && npm run build"
+  },
+  "devDependencies": {
+    "chokidar": "^3.5.3",
+    "concurrently": "^7.6.0"
+  },
+  "keywords": ["ctr", "mapper", "excel", "desktop"],
+  "author": "Your Name",
+  "license": "MIT"
+}
