@@ -53,11 +53,11 @@ FastAPI + Vue 3 (Options API with Composition `setup()`) + openpyxl. Background 
    - No i18n (English only per FR-020) — removed `vue-i18n` dependency entirely
    - No `HelpGuide` modal or `LanguageSelector` component
    - Two-step UI: Step 1 (Configuration) with side-by-side account mapping + exchange rates panels, Step 2 (Upload CTR) with drag-and-drop
-   - Simplified results view: source filename, fiscal year/period, processing time, summary stats (input rows, output rows, currencies) + download button only. No multi-currency table preview or warnings in the UI
+   - Simplified results view: source filename, processing time, summary stats (input rows, output rows, currencies) + download button only. No multi-currency table preview or warnings in the UI
 
 5. **CSV support** (FR-001, FR-024) — `pandas.read_csv()` path alongside Excel
 
-6. **Metadata extraction** from rows 1-26 (FR-002) — fiscal year, period, accounting standard, company currency, etc.
+6. **Metadata extraction** from rows 1-26 (FR-002) — contract currency, company currency, and company only (the three fields actually consumed by the processing logic)
 
 ## Deployment Model
 
@@ -86,7 +86,7 @@ webapp/
       schemas.py                    -- ProcessingRequest, ProcessingResponse, JobStatus, FileInfo
     services/
       __init__.py
-      ctr_reader.py                 -- Shared CTR parsing layer. Validates 9 core columns, extracts metadata from rows 1-26 (Excel only), normalizes currencies, fills missing Account Names, coerces numeric amounts, detects conflicting Account Names. CSV returns None for metadata fields.
+      ctr_reader.py                 -- Shared CTR parsing layer. Validates 7 core columns, extracts contract currency + company currency + company from rows 1-26 (Excel only), normalizes currencies, fills missing Account Names, coerces numeric amounts, detects conflicting Account Names. CSV returns None for metadata fields.
       fx_processor.py               -- FX Remeasurement engine using COLUMN_MAPPINGS dict pattern. Each column is a callable taking (df, account_mapping, exchange_rates) → pd.Series. Uses numpy vectorized operations (np.where) instead of row-by-row iteration.
       config_store.py               -- Config persistence + file parsing/export + history. Key functions:
                                        - _get_app_data_dir() → resolves %LOCALAPPDATA% (desktop) or backend/ (dev)
@@ -113,7 +113,7 @@ webapp/
         ProcessCTR.vue              -- File upload area with readiness checklist (Account Mapping count, Exchange Rates count)
         AccountMapping.vue          -- Upload interface with Replace/Merge modes, Download, and Clear All buttons (no preview table)
         ExchangeRates.vue           -- Upload interface with Replace/Merge modes, Download, and Clear All buttons (no preview table)
-        ResultsView.vue             -- Source filename, fiscal year/period, processing time, summary stats (Input Rows, Output Rows, Currencies) with Download button only
+        ResultsView.vue             -- Source filename, processing time, summary stats (Input Rows, Output Rows, Currencies) with Download button only
         HistoryView.vue             -- Read-only history table showing audit trail of configuration changes
         ProcessingView.vue          -- Progress polling display during file processing
         ErrorView.vue               -- Error state display with retry option
@@ -398,7 +398,7 @@ Per FR-020, English only. Remove `vue-i18n` dependency entirely. All strings are
                                      |                           |
                                      |  - Parse metadata 1-26   |
                                      |  - Read headers row 27   |
-                                     |  - Validate 9 core cols  |
+                                     |  - Validate 7 core cols  |
                                      |  - Normalize currencies  |
                                      |  - Coerce numeric amounts|
                                      +-------------+-------------+

@@ -120,11 +120,6 @@ This tool is designed to be reusable across any multi-currency client. Abbott La
 **FR-001:** The system shall accept Excel (`.xlsx`, `.xls`) or CSV (`.csv`) files matching the CTR export format from Nakisa Lease Administration.
 
 **FR-002:** The system shall extract metadata from rows 1-26 of the input file, including but not limited to:
-- Fiscal Year
-- Fiscal Period
-- Start Date
-- End Date
-- Accounting Standard (IFRS / GAAP)
 - Contract Currency
 - Company Currency
 - Company
@@ -133,19 +128,19 @@ This tool is designed to be reusable across any multi-currency client. Abbott La
 
 **FR-003:** The system shall read column headers from row 27 and identify the following columns:
 
-**Required (10 columns):**
+**Required (7 columns):**
 - Contract ID
 - Account Number
 - Account Name
 - Contract Currency
-- Company Currency
 - Amount in Contract Currency
 - Amount in Company Currency
 - Company
-- Fiscal Year
-- Fiscal Period
 
-**Optional (1 column):**
+**Optional (4 columns):**
+- Company Currency (extracted from metadata or data column fallback)
+- Fiscal Year (not used in Phase 1 processing)
+- Fiscal Period (not used in Phase 1 processing)
 - Transaction Type (not used in Phase 1 processing)
 
 **FR-004:** The system shall detect and report mismatches if required columns are absent; processing shall not proceed.
@@ -233,7 +228,7 @@ Both configuration files are independent of the CTR report — they can be uploa
 - Column K (Period-End Spot Exchange Rate) shall be formatted as a plain decimal number with up to 6 decimal places (no parentheses — rates are always positive)
 - This formatting applies to Excel cell formatting only and does not affect the underlying stored value or numeric precision
 
-**FR-014:** The output file shall be named with a pattern: `CTR_FX_Remeasurement_{FiscalYear}_{FiscalPeriod}_{Timestamp}.xlsx`. For CSV inputs where fiscal year/period metadata is unavailable, the pattern shall fall back to `CTR_FX_Remeasurement_Unknown_Unknown_{Timestamp}.xlsx`.
+**FR-014:** The output file shall be named with a pattern: `CTR_FX_Remeasurement_{Timestamp}.xlsx`.
 
 ### User Interface
 
@@ -525,7 +520,7 @@ Both configuration files are independent of the CTR report — they can be uploa
 ## 7. Phase 1 Scope (This Ticket)
 
 ### In Scope
-- Parse CTR metadata (rows 1-26) and extract key fields
+- Extract CTR metadata (rows 1-26): Contract Currency, Company Currency, and Company
 - Identify and validate required columns
 - Group data by {Contract ID, Account Number, Account Name, Contract Currency}
 - Aggregate Amount in Contract Currency and Amount in Company Currency
@@ -533,7 +528,7 @@ Both configuration files are independent of the CTR report — they can be uploa
 - Accept period-end exchange rates as file upload (CSV/Excel) with Replace/Merge modes
 - Download current configs as Excel files for sharing between desktop users
 - Clear All buttons to clear saved configs
-- Download output Excel file (FX Gain/Loss results) — `CTR_FX_Remeasurement_{FY}_{FP}_{Timestamp}.xlsx`
+- Download output Excel file (FX Gain/Loss results) — `CTR_FX_Remeasurement_{Timestamp}.xlsx`
 - Apply rate logic based on the Rate column in account mapping (Historical or Period End)
 - Look up spot exchange rate by matching FromCurrency → contract currency and ToCurrency → company currency
 - Calculate Re-measured Balance (col8 × col11 for Period End accounts, = col9 for Historical accounts)
@@ -648,8 +643,8 @@ Both configuration files are independent of the CTR report — they can be uploa
 
 | ID | Question | Owner | Due Date | Status | Resolution |
 |----|----------|-------|----------|--------|------------|
-| OQ-001 | Can a single GL account number appear in multiple contract currencies within the same Contract ID? If yes, grouping key `{Contract ID, Account Number, Contract Currency}` is correct. If no, it simplifies to `{Contract ID, Account Number}`. Affects US-02 and FR-006. | Abbott Implementation Team | Before Phase 1 sign-off | Resolved | Confirmed grouping key is {Contract ID, Account Number, Account Name, Contract Currency}. Contract ID is a new addition beyond the original Excel. Account Name included per original Jira ticket. |
-| OQ-002 | When the Exchange Rates config has multiple entries for the same {FromCurrency, ToCurrency} pair with different ValidFrom dates, should the system use a floor lookup (most recent ValidFrom ≤ CTR End Date), or should users always upload an exact-match rate for the period end date? Affects FR-034 and EC-011. | Abbott Implementation Team | Before Phase 1 sign-off | Open | Working assumption: floor lookup — use the most recent ValidFrom ≤ CTR End Date (FR-034). Implementation will proceed with this assumption. Pending client validation before Phase 1 sign-off. |
+| OQ-001 | Can a single GL account number appear in multiple contract currencies within the same Contract ID? If yes, grouping key `{Contract ID, Account Number, Contract Currency}` is correct. If no, it simplifies to `{Contract ID, Account Number}`. Affects US-02 and FR-006. | Abbott Implementation Team | Before Phase 1 sign-off | Resolved | A single GL account does NOT appear under multiple contract currencies. Grouping key follows LAE-44136 ticket specification: {Contract Currency, Account Number, Account Name} per contract. Contract Currency is a reporting dimension, not a data differentiator. |
+| OQ-002 | When the Exchange Rates config has multiple entries for the same {FromCurrency, ToCurrency} pair with different ValidFrom dates, should the system use a floor lookup (most recent ValidFrom ≤ CTR End Date), or should users always upload an exact-match rate for the period end date? Affects FR-034 and EC-011. | Abbott Implementation Team | Before Phase 1 sign-off | Resolved | Confirmed: floor lookup — use the most recent ValidFrom ≤ CTR End Date (FR-034). |
 
 ---
 

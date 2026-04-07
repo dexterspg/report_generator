@@ -1,131 +1,127 @@
 <template>
-  <div class="app-wrapper">
-    <div class="topbar">
+  <div class="page">
+    <!-- Header -->
+    <div class="header">
       <h1>CTR FX Remeasurement</h1>
-      <span class="status">Desktop Mode</span>
+      <div class="subtitle">Consolidated Transaction Report &mdash; FX Gain/Loss Calculator</div>
     </div>
-    <div class="shell">
-      <nav class="sidebar">
-        <div class="section-label">Process</div>
-        <a :class="{ active: currentView === 'process' }" @click="navigate('process')">Process CTR</a>
-        <div class="section-label">Config</div>
-        <a :class="{ active: currentView === 'mapping' }" @click="navigate('mapping')">
-          Account Mapping
-          <span class="badge" v-if="mappingCount > 0">{{ mappingCount }}</span>
-        </a>
-        <a :class="{ active: currentView === 'rates' }" @click="navigate('rates')">
-          Exchange Rates
-          <span class="badge" v-if="ratesCount > 0">{{ ratesCount }}</span>
-        </a>
-        <div class="section-label">Audit</div>
-        <a :class="{ active: currentView === 'history' }" @click="navigate('history')">History</a>
-      </nav>
-      <div style="overflow: hidden;">
-        <ProcessCTR
-          v-if="currentView === 'process'"
-          :mapping-count="mappingCount"
-          :rates-count="ratesCount"
-          @start-processing="onStartProcessing"
-          @error="onError"
-        />
-        <ProcessingView
-          v-else-if="currentView === 'processing'"
-          :job-id="currentJobId"
-          :filename="processingFilename"
-          @show-results="onShowResults"
-          @error="onError"
-        />
-        <ResultsView
-          v-else-if="currentView === 'results'"
-          :job-id="currentJobId"
-          :result="currentResult"
-          @new-upload="navigate('process')"
-        />
-        <AccountMapping
-          v-else-if="currentView === 'mapping'"
-          @count-changed="onMappingCountChanged"
-        />
-        <ExchangeRates
-          v-else-if="currentView === 'rates'"
-          @count-changed="onRatesCountChanged"
-        />
-        <HistoryView
-          v-else-if="currentView === 'history'"
-        />
-        <ErrorView
-          v-else-if="currentView === 'error'"
-          :message="errorMessage"
-          @retry="navigate('process')"
-        />
+
+    <!-- Layout: sidebar + content -->
+    <div class="layout">
+      <div class="sidebar">
+        <div class="sidebar-section">
+          <div class="sidebar-label">Process</div>
+          <div
+            class="sidebar-item"
+            :class="{ active: currentView === 'process' }"
+            @click="navigate('process')"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            Process CTR
+          </div>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-label">Config</div>
+          <div
+            class="sidebar-item"
+            :class="{ active: currentView === 'mapping' }"
+            @click="navigate('mapping')"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+            Account Mapping
+          </div>
+          <div
+            class="sidebar-item"
+            :class="{ active: currentView === 'rates' }"
+            @click="navigate('rates')"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            Exchange Rates
+          </div>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-label">Audit</div>
+          <div
+            class="sidebar-item"
+            :class="{ active: currentView === 'history' }"
+            @click="navigate('history')"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            History
+          </div>
+        </div>
+        <div class="sidebar-footer">
+          <div class="version">v1.0.0-phase1</div>
+        </div>
+      </div>
+
+      <div class="content">
+        <!-- Slice 1: placeholder content for each view -->
+        <div v-if="currentView === 'process'">
+          <h2>Process CTR</h2>
+          <p class="desc">Upload a CTR file to extract closing balances and calculate FX remeasurement.</p>
+          <div class="card">
+            <div class="card-body">
+              <p style="color: var(--text-tertiary); text-align: center; padding: 40px 0;">
+                Upload a CTR file to begin processing.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="currentView === 'mapping'">
+          <h2>Account Mapping</h2>
+          <p class="desc">Configure GL account classifications for FX remeasurement.</p>
+          <div class="card">
+            <div class="card-body">
+              <p style="color: var(--text-tertiary); text-align: center; padding: 40px 0;">
+                Upload and manage GL account classifications.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="currentView === 'rates'">
+          <h2>Exchange Rates</h2>
+          <p class="desc">Configure period-end exchange rates for currency remeasurement.</p>
+          <div class="card">
+            <div class="card-body">
+              <p style="color: var(--text-tertiary); text-align: center; padding: 40px 0;">
+                Upload and manage period-end exchange rates.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="currentView === 'history'">
+          <h2>Audit History</h2>
+          <p class="desc">Track all configuration changes for audit compliance.</p>
+          <div class="card">
+            <div class="card-body">
+              <p style="color: var(--text-tertiary); text-align: center; padding: 40px 0;">
+                View the audit trail of configuration changes.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script>
-import { ref, onMounted } from 'vue'
-import axios from 'axios'
-import ProcessCTR from './components/ProcessCTR.vue'
-import ProcessingView from './components/ProcessingView.vue'
-import ResultsView from './components/ResultsView.vue'
-import AccountMapping from './components/AccountMapping.vue'
-import ExchangeRates from './components/ExchangeRates.vue'
-import HistoryView from './components/HistoryView.vue'
-import ErrorView from './components/ErrorView.vue'
+import { ref } from 'vue'
 
 export default {
   name: 'App',
-  components: { ProcessCTR, ProcessingView, ResultsView, AccountMapping, ExchangeRates, HistoryView, ErrorView },
   setup() {
     const currentView = ref('process')
-    const currentJobId = ref(null)
-    const currentResult = ref(null)
-    const processingFilename = ref('')
-    const errorMessage = ref('')
-    const mappingCount = ref(0)
-    const ratesCount = ref(0)
-
-    const fetchCounts = async () => {
-      try {
-        const [mRes, rRes] = await Promise.all([
-          axios.get('/config/account-mapping'),
-          axios.get('/config/exchange-rates'),
-        ])
-        mappingCount.value = mRes.data.count ?? 0
-        ratesCount.value = rRes.data.count ?? 0
-      } catch {}
-    }
-
-    onMounted(fetchCounts)
 
     const navigate = (view) => {
       currentView.value = view
     }
 
-    const onStartProcessing = ({ jobId, filename }) => {
-      currentJobId.value = jobId
-      processingFilename.value = filename
-      currentView.value = 'processing'
-    }
-
-    const onShowResults = (result) => {
-      currentResult.value = result
-      currentView.value = 'results'
-    }
-
-    const onError = (message) => {
-      errorMessage.value = message
-      currentView.value = 'error'
-    }
-
-    const onMappingCountChanged = (count) => { mappingCount.value = count }
-    const onRatesCountChanged = (count) => { ratesCount.value = count }
-
-    return {
-      currentView, currentJobId, currentResult, processingFilename, errorMessage,
-      mappingCount, ratesCount, navigate, onStartProcessing, onShowResults, onError,
-      onMappingCountChanged, onRatesCountChanged,
-    }
+    return { currentView, navigate }
   }
 }
 </script>
