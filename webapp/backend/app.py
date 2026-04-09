@@ -10,8 +10,8 @@ Can run as:
 - Desktop app:   python app.py --desktop
 """
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -22,6 +22,16 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 import uvicorn
+
+from services.config_store import (
+    get_account_mapping,
+    get_account_mapping_count,
+    parse_account_mapping_file,
+    save_account_mapping_replace,
+    save_account_mapping_merge,
+    reset_account_mapping,
+    export_account_mapping,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -65,6 +75,82 @@ async def health_check():
         "timestamp": datetime.now().isoformat(),
         "mode": "desktop" if DESKTOP_MODE else "web",
     }
+
+
+# ---------------------------------------------------------------------------
+# Configuration — Account Mapping (Slice 2)
+# ---------------------------------------------------------------------------
+
+@app.get("/config/account-mapping")
+async def get_account_mapping_endpoint():
+    """Return the current saved account mapping and row count."""
+    mapping = get_account_mapping()
+    return {"mapping": mapping, "count": len(mapping)}
+
+
+@app.post("/config/account-mapping")
+async def upload_account_mapping(
+    file: UploadFile = File(...),
+    mode: str = Form("replace"),
+):
+    """
+    Upload an account mapping file (CSV/Excel).
+
+    Form fields:
+      file  — multipart file upload (.xlsx, .xls, .csv)
+      mode  — "replace" (default) or "merge"
+    """
+    allowed = {".xlsx", ".xls", ".csv"}
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '{suffix}'. Accepted: .xlsx, .xls, .csv",
+        )
+
+    mode = mode.strip().lower()
+    if mode not in ("replace", "merge"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid mode. Use 'replace' or 'merge'.",
+        )
+
+    try:
+        records = parse_account_mapping_file(file)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    if mode == "replace":
+        count = save_account_mapping_replace(records)
+    else:
+        count = save_account_mapping_merge(records)
+
+    return {
+        "status": "ok",
+        "mode": mode,
+        "rows_processed": count,
+        "total_count": get_account_mapping_count(),
+    }
+
+
+@app.get("/config/account-mapping/download")
+async def download_account_mapping():
+    """Export the current account mapping as a styled .xlsx file."""
+    data = export_account_mapping()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"account_mapping_{timestamp}.xlsx"
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.delete("/config/account-mapping")
+async def clear_account_mapping():
+    """Clear all saved account mapping data."""
+    reset_account_mapping()
+    return {"status": "ok", "count": 0}
 
 
 # ---------------------------------------------------------------------------

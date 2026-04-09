@@ -56,7 +56,7 @@
       </div>
 
       <div class="content">
-        <!-- Slice 1: placeholder content for each view -->
+        <!-- Process CTR — placeholder (Slice 4) -->
         <div v-if="currentView === 'process'">
           <h2>Process CTR</h2>
           <p class="desc">Upload a CTR file to extract closing balances and calculate FX remeasurement.</p>
@@ -69,18 +69,13 @@
           </div>
         </div>
 
-        <div v-else-if="currentView === 'mapping'">
-          <h2>Account Mapping</h2>
-          <p class="desc">Configure GL account classifications for FX remeasurement.</p>
-          <div class="card">
-            <div class="card-body">
-              <p style="color: var(--text-tertiary); text-align: center; padding: 40px 0;">
-                Upload and manage GL account classifications.
-              </p>
-            </div>
-          </div>
-        </div>
+        <!-- Account Mapping — Slice 2 -->
+        <AccountMapping
+          v-else-if="currentView === 'mapping'"
+          @count-changed="mappingCount = $event"
+        />
 
+        <!-- Exchange Rates — placeholder (Slice 3) -->
         <div v-else-if="currentView === 'rates'">
           <h2>Exchange Rates</h2>
           <p class="desc">Configure period-end exchange rates for currency remeasurement.</p>
@@ -93,6 +88,7 @@
           </div>
         </div>
 
+        <!-- Audit History — placeholder (Slice 5) -->
         <div v-else-if="currentView === 'history'">
           <h2>Audit History</h2>
           <p class="desc">Track all configuration changes for audit compliance.</p>
@@ -111,17 +107,20 @@
 
 <script>
 import { ref } from 'vue'
+import AccountMapping from './components/AccountMapping.vue'
 
 export default {
   name: 'App',
+  components: { AccountMapping },
   setup() {
     const currentView = ref('process')
+    const mappingCount = ref(0)
 
     const navigate = (view) => {
       currentView.value = view
     }
 
-    return { currentView, navigate }
+    return { currentView, mappingCount, navigate }
   }
 }
 </script>

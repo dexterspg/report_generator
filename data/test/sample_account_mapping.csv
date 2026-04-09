@@ -1,0 +1,13 @@
+Account Number,Account Type,Monetary?,Rate
+1100,Asset,Monetary,Period End
+1200,Asset,Monetary,Period End
+1300,Asset,Non-Monetary,Historical
+1400,Asset,Non-Monetary,Historical
+2100,Liability,Monetary,Period End
+2200,Liability,Monetary,Period End
+2300,Liability,Non-Monetary,Historical
+3100,Equity,Non-Monetary,Historical
+4100,Revenue,Monetary,Period End
+5100,Expense,Monetary,Period End
+5200,Expense,Non-Monetary,Historical
+6100,Contra Asset,Non-Monetary,Historical
