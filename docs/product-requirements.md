@@ -137,11 +137,10 @@ This tool is designed to be reusable across any multi-currency client. Abbott La
 - Amount in Company Currency
 - Company
 
-**Optional (4 columns):**
-- Company Currency (extracted from metadata or data column fallback)
-- Fiscal Year (not used in Phase 1 processing)
-- Fiscal Period (not used in Phase 1 processing)
-- Transaction Type (not used in Phase 1 processing)
+**Optional (3 columns — present in Excel CTR exports but not used in Phase 1 processing):**
+- Fiscal Year
+- Fiscal Period
+- Transaction Type
 
 **FR-004:** The system shall detect and report mismatches if required columns are absent; processing shall not proceed.
 
@@ -237,7 +236,7 @@ Both configuration files are independent of the CTR report — they can be uploa
 **FR-016:** The application shall follow a two-step configure-then-process workflow:
 - **Step 1 — Configuration:** User manages two configuration files (account mapping and exchange rates) via upload, download, replace, merge, and Clear All operations. Configs persist locally and are available across sessions.
 - **Step 2 — Upload & Process:** User uploads the CTR report file. The Process button is disabled until both configurations are loaded. Processing runs asynchronously with job ID and status polling.
-- **Results:** Upon completion, the results view shows the source filename, fiscal year/period, processing time, summary stats (input rows, output rows, currencies), a "Download Output" button, and a "Process Another File" button. No detailed output table or warnings are displayed in the UI — the full output is in the downloaded Excel file.
+- **Results:** Upon completion, the results view shows the source filename, processing time, summary stats (input rows, output rows, currencies), a "Download Output" button, and a "Process Another File" button. No detailed output table or warnings are displayed in the UI — the full output is in the downloaded Excel file.
 
 *Note: UI layout, sidebar structure, card organization, and component details (button placement, form structure, status indicators) are specified in the mockup at `webapp/mockup-v1.html`. This PRD documents functional behavior and data flow; the mockup is the authoritative source for visual layout and UI component positioning.*
 

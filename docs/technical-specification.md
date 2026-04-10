@@ -1,56 +1,46 @@
-# Implementation Brief: CTR FX Remeasurement Tool
+# Technical Specification: CTR FX Remeasurement Tool
 
 ## UI Design Reference
 
-**Mockup:** `webapp/mockup-v1.html` — 9 screens covering all Phase 1 states (empty, partial config, file uploaded, processing, error, results, account mapping config, exchange rates config, history). Frontend components should match these screens.
+**Mockup:** `webapp/mockup-v1.html` — authoritative source for all visual layout and UI component positioning. Covers 9 screens for all Phase 1 states: empty, partial config, file uploaded, processing, error, results, account mapping config, exchange rates config, and history.
 
-## Sister Project / Pattern
+All frontend components **must** match the mockup screens. The PRD documents functional behavior and data flow; the mockup governs layout, sidebar structure, card organization, button placement, form structure, and status indicators.
 
-**CTR Mapper (Poliza Ledger)** at `C:/workarea/maturity_analysis_report/webapp/`
+## Tech Stack
 
-FastAPI + Vue 3 (Options API with Composition `setup()`) + openpyxl. Background job processing with status polling. Dual-mode: web server (`0.0.0.0:8000`) and desktop (`localhost:5001` + auto-browser). Same blue brand background `#009cde`.
+FastAPI + Vue 3 (Options API with Composition `setup()`) + openpyxl. Background job processing with status polling. Dual-mode: web server (`0.0.0.0:8000`) and desktop (`localhost:5001` + auto-browser). Brand background `#009cde`.
 
-## What's Reused
+## Features
 
-- **Backend skeleton:** FastAPI app structure, CORS middleware, upload directory management, `cleanup_old_files()`, background task pattern with job ID + status polling, `/status/{job_id}` + `/health` + `/cleanup` endpoints, dual-mode `main()` with `--desktop` flag, PyInstaller path resolution
-- **CTR parsing logic:** `pd.read_excel(source, header=26)` reads header row 27, core column validation, `input_header_start` / `input_data_start` defaults (27/28). The CTR format is fixed (Nakisa system export) — the same source columns are present regardless of which output report is being generated. `ctr_reader.py` owns this shared knowledge; each output processor defines only the subset it needs.
-- **Pydantic models:** `ProcessingRequest`, `ProcessingResponse`, `JobStatus` schemas (with minor field additions)
-- **Frontend infrastructure:** Vue 3 project scaffolding, `main.js`, `vite.config.js`, `package.json` deps (axios, vue)
-- **Shared components (adapted):** `ProgressSection.vue`, `ErrorSection.vue`, `AppFooter.vue` carry over as-is. `AppHeader.vue` carries over with new title/subtitle text
-- **Global CSS:** `styles.css` reused nearly verbatim (background `#009cde`, `.card`, `.btn-*`, `.upload-area`, `.progress-*`, `.results-grid`, `.download-section`, animations). The base styling IS the brand identity
-- **File validation:** 50MB limit, `.xlsx`/`.xls`/`.csv` accept types, drag-and-drop behavior
-
-## What's New
-
-1. **FX Remeasurement processing engine** (`fx_processor.py` — replaces `formula_mapper.py` + `ExcelProcessor`)
+1. **FX Remeasurement processing engine** (`fx_processor.py`)
    - Uses vectorized `COLUMN_MAPPINGS` dict pattern: `{ column_name: callable(df, account_mapping, exchange_rates) -> pd.Series }`
-   - Group by `{Account Number, Account Name, Contract Currency}` and aggregate `Amount in Contract Currency` and `Amount in Company Currency`
+   - Group by `{Contract ID, Account Number, Account Name, Contract Currency}` and aggregate `Amount in Contract Currency` and `Amount in Company Currency`
    - Apply account mapping (Account Type: free text e.g. Asset, Liability, Contra Asset; Monetary: Monetary/Non-Monetary)
    - Apply period-end exchange rates per currency pair
    - Calculate Re-measured Balance: `balance_cc * spot_rate` (monetary) or `initial_measurement` (non-monetary)
-   - Calculate FX (Gain) or Loss: `remeasured_balance - initial_measurement`
-   - Output 12-column workbook (Contract ID + 11 data columns) with one worksheet per unique Contract Currency
+   - Calculate FX (Gain) or Loss: `initial_measurement - remeasured_balance`
+   - Output 13-column workbook (Contract ID + 12 data columns) with one worksheet per unique Contract Currency
 
-2. **File-based configuration management** (replaces single-file upload + editable table approach)
+2. **File-based configuration management**
    - Both configs (account mapping + exchange rates) managed as uploadable/downloadable CSV/Excel files
    - Account mapping columns: `Account Number`, `Account Type`, `Monetary?`, `Rate` (4 columns)
    - Exchange rates columns: `RateType`, `FromCurrency`, `ToCurrency`, `ValidFrom`, `ExchangeRate` (5 columns). Duplicate detection uses internal auto-generated ID; merge key is composite `{FromCurrency, ToCurrency, ValidFrom}`
    - Exchange rate lookup: match `FromCurrency` → account's contract currency, `ToCurrency` → company currency
    - Two upload modes: **Replace** (overwrite all) and **Merge** (add new + update existing by key)
    - Download current config as styled Excel for sharing between desktop users
-   - Reset capability to clear all saved data per config type
-   - Internal persistence as JSON files in `%LOCALAPPDATA%/CTR-FX-Remeasurement/config/`
+   - Clear All capability to remove all saved data per config type
+   - Internal persistence in SQLite database (ctr_fx.db) in `%LOCALAPPDATA%/CTR-FX-Remeasurement/`
 
 3. **Configuration history (view-only)**
-   - Every config change (upload, reset) recorded as a history entry with full snapshots
+   - Every config change (upload, clear_all) recorded as a history entry with full snapshots
    - Users can view history as a read-only table (Timestamp, Action, Config, Details)
-   - Rollback is manual: user navigates to the history folder and deletes the most recent entry
+   - Phase 1 recovery: download current config, edit in Excel, re-upload with Replace mode
    - No rollback button in the UI (Phase 2 feature)
-   - Stored as individual JSON files in `%LOCALAPPDATA%/CTR-FX-Remeasurement/history/`
+   - Stored in config_history table in ctr_fx.db
 
 4. **Frontend redesign** (clean, purpose-built)
    - No company code dropdown scaffolding
-   - No i18n (English only per FR-020) — removed `vue-i18n` dependency entirely
+   - No i18n (English only per FR-019) — removed `vue-i18n` dependency entirely
    - No `HelpGuide` modal or `LanguageSelector` component
    - Two-step UI: Step 1 (Configuration) with side-by-side account mapping + exchange rates panels, Step 2 (Upload CTR) with drag-and-drop
    - Simplified results view: source filename, processing time, summary stats (input rows, output rows, currencies) + download button only. No multi-currency table preview or warnings in the UI
@@ -75,11 +65,7 @@ FastAPI + Vue 3 (Options API with Composition `setup()`) + openpyxl. Background 
 webapp/
   backend/
     app.py                          -- FastAPI app with config management, history, and processing endpoints
-    config/                         -- Dev-mode config storage (desktop uses %LOCALAPPDATA%)
-      account_mapping.json
-      exchange_rates.json
-    history/                        -- Dev-mode history storage
-      {uuid}.json                   -- One file per history entry (timestamp, action, snapshots)
+    ctr_fx.db                       -- Single SQLite database (dev-mode; desktop uses %LOCALAPPDATA%)
     uploads/                        -- Temporary file storage (cleaned up after 1 hour)
     models/
       __init__.py
@@ -108,15 +94,13 @@ webapp/
       components/
         AppHeader.vue               -- Title: "CTR FX Remeasurement", subtitle: "Consolidated Transaction Report — FX Gain/Loss Calculator"
         AppFooter.vue               -- Minimal footer (same as sister)
-        ProgressSection.vue         -- Progress bar + spinner (hardcoded English)
-        ErrorSection.vue            -- Error display + retry (hardcoded English)
+        ProgressSection.vue         -- Progress bar + spinner during file processing (hardcoded English)
+        ErrorSection.vue            -- Error display with retry option (hardcoded English)
         ProcessCTR.vue              -- File upload area with readiness checklist (Account Mapping count, Exchange Rates count)
         AccountMapping.vue          -- Upload interface with Replace/Merge modes, Download, and Clear All buttons (no preview table)
         ExchangeRates.vue           -- Upload interface with Replace/Merge modes, Download, and Clear All buttons (no preview table)
         ResultsView.vue             -- Source filename, processing time, summary stats (Input Rows, Output Rows, Currencies) with Download button only
         HistoryView.vue             -- Read-only history table showing audit trail of configuration changes
-        ProcessingView.vue          -- Progress polling display during file processing
-        ErrorView.vue               -- Error state display with retry option
 ```
 
 ## Backend API Endpoints
@@ -146,18 +130,17 @@ webapp/
 | `GET` | `/history` | List config change history (most recent first). Query param: `limit` (default 50). Returns: timestamp, action, config_type, details |
 | `GET` | `/history/{entry_id}` | Get full history entry including config snapshots |
 | `DELETE` | `/history` | Clear all history entries |
-| `POST` | `/history/{entry_id}/rollback` | **Phase 2** — not implemented in Phase 1 |
 
 ### Core Processing
 
 | Method | Path | Description |
 |--------|------|-------------|
+| `POST` | `/upload` | Upload CTR file for processing. Form field: `file` (multipart). Returns `{ "job_id": "uuid" }`. Triggers background task: `ctr_reader.py` → `fx_processor.py`. Poll `/status/{job_id}` for progress. On completion, status includes `download_url` for the output `.xlsx` file. |
 | `GET` | `/` | Serve frontend (index.html) or API info |
-| `GET` | `/status/{job_id}` | Get processing status for a job |
+| `GET` | `/status/{job_id}` | Get processing status for a job. Returns: `{ "status": "pending|processing|completed|error", "progress": 0-100, "result": { "download_url", "summary" }, "error": "message" }` |
+| `GET` | `/download/{job_id}` | Download the output `.xlsx` file for a completed job |
 | `GET` | `/health` | Health check (includes mode: desktop/web) |
 | `DELETE` | `/cleanup` | Manual cleanup of old files and jobs |
-
-**Note:** The CTR upload and processing endpoint (`POST /upload` or equivalent) is not yet implemented — it will accept the CTR file, run `ctr_reader.py` → `fx_processor.py`, and return results via the job status polling pattern.
 
 ## Key Design Decisions
 
@@ -171,8 +154,8 @@ webapp/
 - Upload mode is either **Replace** (clear existing, load from file) or **Merge** (add new, update existing by Account Number)
 - Phase 1 UI: Upload area with Replace/Merge toggle, plus Download and Clear All buttons (no preview table of current mapping)
 - API supports viewing current mapping via `GET /config/account-mapping` and downloading styled Excel via `GET /config/account-mapping/download`
-- Reset via `DELETE /config/account-mapping` clears all saved data
-- Every upload and reset is recorded in history with a full config snapshot for rollback
+- Clear All via `DELETE /config/account-mapping` removes all saved data
+- Every upload and Clear All is recorded in history with a full config snapshot
 
 ### 2. Exchange Rate Input: File upload with Replace/Merge
 
@@ -188,7 +171,7 @@ webapp/
 - Currency codes normalized to uppercase; rates stored as exact text (Python `Decimal` used for all arithmetic — no float conversion)
 
 **Why SQLite (not JSON) for exchange rates:**
-Clients may have multiple rates per currency pair across different time periods (e.g. monthly period-end rates). The processor must find the rate valid on or before the CTR's fiscal period date — a date-range lookup that is error-prone in flat JSON but trivial in SQL. Account mapping has no time dimension, so it stays as JSON.
+Clients may have multiple rates per currency pair across different time periods (e.g. monthly period-end rates). The processor must find the rate valid on or before the CTR's fiscal period date — a date-range lookup that is trivial in SQL.
 
 **Rate lookup query (executed by `config_store.py`):**
 ```sql
@@ -281,9 +264,9 @@ CREATE INDEX IF NOT EXISTS idx_exchange_rates_lookup
 |---|---|---|
 | `id` | TEXT PRIMARY KEY | UUID generated at insert time |
 | `timestamp` | TEXT | ISO datetime `YYYY-MM-DDTHH:MM:SS` |
-| `action` | TEXT | `upload`, `reset` |
+| `action` | TEXT | `upload`, `clear_all` |
 | `config_type` | TEXT | `account_mapping`, `exchange_rates`, `both` |
-| `source_filename` | TEXT | Original uploaded filename (null for reset) |
+| `source_filename` | TEXT | Original uploaded filename (null for clear_all) |
 | `details` | TEXT | Human-readable summary (e.g. "42 rows loaded") |
 | `snapshot_account_mapping` | TEXT | Full JSON snapshot of account_mapping at this point |
 | `snapshot_exchange_rates` | TEXT | Full JSON snapshot of exchange_rates at this point |
@@ -308,7 +291,7 @@ CREATE TABLE IF NOT EXISTS config_history (
 **Why:** Audit trail for accountability — users can see what config changes were made and when.
 
 **How it works:**
-- `save_history_entry()` is called on every config change (upload, reset)
+- `save_history_entry()` is called on every config change (upload, clear_all)
 - Each entry stores: timestamp, action, config_type, source_filename, details, plus full snapshots of both configs at that moment
 - `list_history()` returns summaries (without bulky snapshots) for display as a read-only table
 - UI displays: Timestamp, Action, Config, Details — read-only audit log
@@ -317,7 +300,7 @@ CREATE TABLE IF NOT EXISTS config_history (
 
 ### 5. COLUMN_MAPPINGS Vectorized Pattern in fx_processor.py
 
-**Why:** Same pattern as the sister project's `FORMULA_MAPPINGS` in `formula_mapper.py`. Each output column is a pure function that takes the DataFrame + config and returns a pandas Series. This enables vectorized numpy operations instead of row-by-row iteration, and makes adding/modifying columns trivial.
+**Why:** Each output column is a pure function that takes the DataFrame + config and returns a pandas Series. This enables vectorized numpy operations instead of row-by-row iteration, and makes adding/modifying columns trivial.
 
 **Structure:**
 ```python
@@ -328,6 +311,7 @@ COLUMN_MAPPINGS = {
     "Account Type": _col_account_type,
     "Monetary?": _col_monetary,
     "Account Currency": _col_account_currency,
+    "Company Currency": _col_company_currency,
     "Balance in Contract Currency": _col_balance_cc,
     "Initial Measurement Company Currency Balance": _col_initial_measurement,
     "Rate": _col_rate,                          # from account mapping (Historical / Period End)
@@ -339,17 +323,13 @@ COLUMN_MAPPINGS = {
 
 Each callable: `(df: pd.DataFrame, account_mapping: list[dict], exchange_rates: list[dict]) -> pd.Series`
 
-### 6. Output: Single `.xlsx` file (not ZIP)
+### 6. Output: Single `.xlsx` file
 
-Unlike the sister project which generates one file per company code and ZIPs them, this tool produces a single workbook with one worksheet per currency. No ZIP needed in Phase 1.
+Single workbook with one worksheet per currency. Output format is fixed (headers in row 1, data from row 2) per FR-012. Output filename: `CTR_FX_Remeasurement_{Timestamp}.xlsx` per FR-014.
 
-### 7. Drop `template_header_start` / `template_data_start` from sister project
+### 7. No i18n
 
-The sister project's `ProcessingRequest` includes `template_header_start` and `template_data_start` for configurable output formatting. These are NOT carried over — the FX tool's output format is fixed (headers in row 1, data from row 2) per FR-013.
-
-### 8. No i18n
-
-Per FR-020, English only. Remove `vue-i18n` dependency entirely. All strings are hardcoded in templates. This eliminates the `i18n/` directory, locale JSON files, `LanguageSelector.vue`, and `useI18n()` calls.
+Per FR-019, English only. Remove `vue-i18n` dependency entirely. All strings are hardcoded in templates. This eliminates the `i18n/` directory, locale JSON files, `LanguageSelector.vue`, and `useI18n()` calls.
 
 ## Data Flow
 
@@ -374,7 +354,7 @@ Per FR-020, English only. Remove `vue-i18n` dependency entirely. All strings are
                                      |                           |
                                      |  - Parse CSV/Excel file   |
                                      |  - Apply replace/merge    |
-                                     |  - Save to JSON           |
+                                     |  - Save to SQLite (ctr_fx.db)|
                                      |  - Record history entry   |
                                      |  - Return current config  |
                                      +-------------+-------------+
@@ -408,8 +388,9 @@ Per FR-020, English only. Remove `vue-i18n` dependency entirely. All strings are
                                      |  fx_processor.py (bg task)|
                                      |                           |
                                      |  - Load saved configs    |
-                                     |  - Group by {AcctNum,    |
-                                     |    AcctName, Currency}   |
+                                     |  - Group by {ContractID, |
+                                     |    AcctNum, AcctName,    |
+                                     |    Currency}             |
                                      |  - Apply COLUMN_MAPPINGS |
                                      |    (vectorized)          |
                                      |  - Write .xlsx (1 sheet  |
@@ -430,7 +411,7 @@ Per FR-020, English only. Remove `vue-i18n` dependency entirely. All strings are
 
 ### Output Excel Structure (per worksheet, one per currency)
 
-Rows within each worksheet are sorted by Account Number ascending (FR-010).
+Rows within each worksheet are sorted by Account Number ascending (FR-009).
 
 | Col | Header | Source |
 |-----|--------|--------|
@@ -440,29 +421,89 @@ Rows within each worksheet are sorted by Account Number ascending (FR-010).
 | 4 | Account Type | Account mapping config |
 | 5 | Monetary? | Account mapping config (Monetary / Non-Monetary) |
 | 6 | Account Currency | CTR Contract Currency (worksheet name) |
-| 7 | Balance in Contract Currency | SUM(Amount in Contract Currency) per group |
-| 8 | Initial Measurement Company Currency Balance | SUM(Amount in Company Currency) per group |
-| 9 | Rate | Account mapping config (Historical / Period End) |
-| 10 | Period-End Spot Exchange Rate | Exchange rates config (matched by FromCurrency → contract ccy, ToCurrency → company ccy) |
-| 11 | Re-measured Balance | col7 * col10 (Period End) or col8 (Historical) |
-| 12 | FX (Gain) or Loss | col11 - col8 |
+| 7 | Company Currency | CTR metadata (Company Currency from rows 1-26) |
+| 8 | Balance in Contract Currency | SUM(Amount in Contract Currency) per group |
+| 9 | Initial Measurement Company Currency Balance | SUM(Amount in Company Currency) per group |
+| 10 | Rate | Account mapping config (Historical / Period End) |
+| 11 | Period-End Spot Exchange Rate | Exchange rates config (matched by FromCurrency → contract ccy, ToCurrency → company ccy) |
+| 12 | Re-measured Balance | col8 * col11 (monetary) or col9 (non-monetary) |
+| 13 | FX (Gain) or Loss | col9 - col12 |
 
 **Number Formatting:** All numeric values are stored and calculated using Python `Decimal` — no float conversion at any stage. Output columns preserve the exact precision from the input. No rounding or truncation. What the user uploads is exactly what they get back.
 
-### Data Quality Handling (FR-011)
+### Data Quality Handling (FR-010)
 
 - **Missing Account Name:** If Account Name is null or empty in the source data, it defaults to "—"
 - **Conflicting Account Names:** When the same Account Number appears with different Account Names across CTR rows, the first occurrence is used and a warning is logged
 
-### Unmapped Account Handling
+### Error Categories (FR-018)
+
+Error messages returned by `ctr_reader.py` and `fx_processor.py` must be specific and actionable:
+
+| Category | Example message |
+|---|---|
+| Missing required columns | "Missing columns: Account Number, Contract Currency" |
+| Insufficient data rows | "File contains 0 data rows after header row 27" |
+| Currency parsing errors | "Cannot parse currency value 'XYZ123' in row 5" |
+| Invalid numeric values | "Non-numeric value in 'Amount in Contract Currency' at row 12" |
+
+### File Size Limit (FR-022)
+
+Maximum upload size: 50 MB. Applies to both CTR files and config files. Files exceeding this limit are rejected before processing with a clear error message.
+
+### Currency Normalization (FR-030)
+
+Currency fields in the CTR may appear as `"{CODE} - {Description}"` format (e.g. `"USD - US Dollar"`). The system extracts the 3-letter ISO code by taking characters before the first `" - "` separator and converting to uppercase. If no `" - "` separator is present, the value is used as-is (uppercased). Applies to Contract Currency and Company Currency fields from CTR input.
+
+### Output Number Formatting (FR-031)
+
+Excel cell formatting rules (does not affect stored numeric precision):
+
+| Columns | Format | Example |
+|---------|--------|---------|
+| Balance in Contract Currency, Initial Measurement, Re-measured Balance, FX (Gain) or Loss | Accounting: thousand separators, 2 decimal places, negatives in parentheses, zero as `–` | `1,234.56` / `(113,405.22)` / `–` |
+| Period-End Spot Exchange Rate | Plain decimal, up to 6 decimal places, no parentheses | `1.234567` |
+
+### Unmapped Account Handling (FR-032)
 
 Accounts present in the CTR but missing from the account mapping config:
-- Columns 1-3, 6-8 are populated (aggregation works regardless)
-- Columns 4-5 show "N/A"
-- Columns 9-12 are left blank
-- The output Excel includes these rows so the user can see what was missed
+- Cols 1-3 and 6-9 are populated (identifiers and balances work regardless)
+- Cols 4-5 show "N/A"
+- Col 10 shows "N/A"
+- Cols 11-13 are left blank
+- A warning is logged identifying the unmapped Account Number
+- Processing continues — the row is included in the output
+
+### Missing Exchange Rate Handling (FR-033)
+
+Accounts with a valid account mapping but no matching exchange rate for their currency pair:
+- Cols 1-6 (identifiers) and 7-9 (Company Currency, balances) are populated
+- Cols 4-5 (Account Type, Monetary?) populated from mapping
+- Col 10 (Rate) populated from mapping
+- Cols 11-13 (Spot Rate, Re-measured Balance, FX Gain/Loss) are left blank
+- A warning is logged identifying the missing currency pair
+- Processing continues — the row is included in the output
+
+### Rate Selection Logic (FR-034)
+
+When multiple exchange rates exist for the same currency pair (different ValidFrom dates), the system uses a floor lookup:
+
+1. Find all rates where `FromCurrency` matches the account's contract currency and `ToCurrency` matches the company currency
+2. Filter to rates where `ValidFrom <= CTR End Date`
+3. Select the most recent (highest ValidFrom) among qualifying rates
+4. If no qualifying rate exists, apply FR-033 fallback (blank cols 11-13)
+5. If CTR has no End Date (CSV input), use the latest available ValidFrom regardless of date
+
+Rate lookup query:
+```sql
+SELECT exchange_rate FROM exchange_rates
+WHERE from_currency = ? AND to_currency = ?
+  AND valid_from <= ?
+ORDER BY valid_from DESC
+LIMIT 1
+```
 
 ---
 
 **Document Status:** Draft
-**Last Updated:** 2026-03-24
+**Last Updated:** 2026-03-26
