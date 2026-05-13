@@ -455,14 +455,14 @@ def run_web_mode():
     DESKTOP_MODE = False
     
     host = "0.0.0.0"
-    port = 8000
-    
+    port = 8080
+
     print("=" * 60)
     print("CTR Mapper Web Application")
     print("=" * 60)
     print(f"Starting server on http://{host}:{port}")
     print("Access the application via web browser")
-    print("API documentation: http://localhost:8000/docs")
+    print("API documentation: http://localhost:8080/docs")
     print("=" * 60)
     
     # Run the application

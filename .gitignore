@@ -235,7 +235,6 @@ logs/
 
 # Dataset files
 *.csv
-*.json
 *.jsonl
 *.parquet
 *.feather

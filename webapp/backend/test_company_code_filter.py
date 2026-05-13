@@ -8,7 +8,7 @@ import os
 import json
 
 # Test configuration
-API_URL = "http://localhost:8000"
+API_URL = "http://localhost:8080"
 TEST_FILE = "test_upload.xlsx"  # Make sure you have a test file with multiple company codes
 
 def test_company_code_filter():

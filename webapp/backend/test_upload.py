@@ -8,7 +8,7 @@ import sys
 import os
 
 # Configuration
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:8080"
 TEST_FILE_PATH = sys.argv[1] if len(sys.argv) > 1 else None
 
 if not TEST_FILE_PATH or not os.path.exists(TEST_FILE_PATH):

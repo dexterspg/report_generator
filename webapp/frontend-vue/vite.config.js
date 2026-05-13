@@ -5,14 +5,14 @@ export default defineConfig({
   plugins: [vue()],
   server: {
     host: '0.0.0.0',
-    port: 3000,
+    port: 5173,
     proxy: {
-      '/upload': 'http://localhost:8000',
-      '/status': 'http://localhost:8000',
-      '/download': 'http://localhost:8000',
-      '/health': 'http://localhost:8000',
-      '/cleanup': 'http://localhost:8000',
-      '/docs': 'http://localhost:8000'
+      '/upload': 'http://localhost:8080',
+      '/status': 'http://localhost:8080',
+      '/download': 'http://localhost:8080',
+      '/health': 'http://localhost:8080',
+      '/cleanup': 'http://localhost:8080',
+      '/docs': 'http://localhost:8080'
     }
   },
   build: {
